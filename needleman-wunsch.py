@@ -197,20 +197,24 @@ def calculate_mulitple_alignment(sm):
     :param sm: Scoring Matrix from scoring_matrix() methode
     :return: Prints multiple alignment.
     """
+
+    # make scoring matrix triangular since it is symmetric
     for i in range(len(sm)):
         for j in range(len(sm[0])):
             if j >= i:
                 sm[i][j] = (0, 0, 0)
-    print('Triangle')
 
     max_score = 0
     max_x = 0
     max_y = 0
     c = 0
 
+    # later output
     set_of_aligned_seq = []
+    # keeps track of which seqs are already in the MSA
     done = []
 
+    # find best pairwise alignment to start MSA with
     for x in sm:
         for y in x:
             if y[0] > max_score:
@@ -221,30 +225,38 @@ def calculate_mulitple_alignment(sm):
                 max_x = y[1]
                 max_y = y[2]
 
-    print('First maximum.')
+    # print('First maximum.')
     set_of_aligned_seq.extend(calculate_pairwise_alignment(patient1['cdr3aa'][max_x], patient1['cdr3aa'][max_y], 'needle/blosum50.txt', -9))
-    print(set_of_aligned_seq)
+    # print(set_of_aligned_seq)
+    # keep track
     done.append(current[1])
     done.append(current[2])
 
+    # avoid finding the same maxium again
     sm[max_x][max_y] = (0, 0, 0)
     sm[max_y][max_x] = (0, 0, 0)
 
     while c <= len(sm):
-        print('While.')
+        # print('While.')
         current = (0, 0, 0)
         max_score = 0
+
+        # find maximum again ...
         for x in done:
+            # horizontal search
             for y in sm[x]:
                 if y[0] > max_score:
+                    # ... that is not on the diagonal ...
                     if y[1] == y[2]:
                         continue
+                    # ... nor already in the MSA
                     if y[1] in done:
                         if y[2] in done:
                             continue
                     max_score = y[0]
                     current = y
-            print('Horizontal.')
+            # print('Horizontal.')
+            # vertical search
             for i in range(len(sm)):
                 y = sm[i][x]
                 if y[0] > max_score:
@@ -255,11 +267,10 @@ def calculate_mulitple_alignment(sm):
                             continue
                     max_score = y[0]
                     current = y
-            print()
         max_x = current[1]
         max_y = current[2]
-        print(current)
-        print(done)
+        # print(current)
+        # print(done)
 
         if max_x not in done:
             set_of_aligned_seq = calculate_pairwise_alignment(set_of_aligned_seq, patient1['cdr3aa'][max_y], 'needle/blosum50.txt', -5)
@@ -268,29 +279,31 @@ def calculate_mulitple_alignment(sm):
             set_of_aligned_seq = calculate_pairwise_alignment(set_of_aligned_seq, patient1['cdr3aa'][max_x], 'needle/blosum50.txt', -5)
             done.append(max_y)
 
-
         sm[max_x][max_y] = (0, 0, 0)
         sm[max_y][max_x] = (0, 0, 0)
 
         c += 1
-        print(len(set_of_aligned_seq))
-        for line in set_of_aligned_seq:
-            print(line)
-        for line in sm:
-            print(line)
+        # print(len(set_of_aligned_seq))
+        # for line in set_of_aligned_seq:
+        #     print(line)
+        # for line in sm:
+        #     print(line)
 
+
+# Convert all patients to df
 all_patients = convert_to_df(path)
+
 patient1 = all_patients[0]
 patient2 = all_patients[1]
+
+# Cut patient 1 short for testing purpose
 patient1 = patient1[:10]
 
+sm_patient1 = scoring_matrix(patient1, 'needle/blosum50.txt', -5)
+# print('Matrix done.')
 
-sm_patient2 = scoring_matrix(patient1, 'needle/blosum50.txt', -5)
-print('Matrix done.')
+calculate_mulitple_alignment(sm_patient1)
 
-calculate_mulitple_alignment(sm_patient2)
-
-# calculate_alignment(t, s, 'needle/blosum50.txt', -5) # Same score but different alignments.
 
 """
 For further use when it comes to dendrograms.
