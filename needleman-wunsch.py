@@ -5,12 +5,8 @@ from pip._vendor.urllib3.connectionpool import xrange
 
 path = '/Users/Enno/PycharmProjects/gamma_delta/data/HD_VDJTools'
 
-
+# Converts VDJ.txt - files to pandas df
 def convert_to_df(p):
-    """
-    :param p: path to directory where .txt files are located
-    :return: list of df
-    """
 
     all_files = os.listdir(p)
     output = []
@@ -35,7 +31,16 @@ def read_BLOSUM(fname):
     return d
 
 
+# Needleman-Wunsch algorithm as described in wikipedia
 def needleman_wunsch(seq1, seq2, b, g):
+    """
+
+    :param seq1:
+    :param seq2:
+    :param b: Blossum Matrix
+    :param g: Gap Penalty
+    :return M: Scoring Matrix
+    """
     m = len(seq1) + 1  # Rows
     n = len(seq2) + 1  # Columns
 
@@ -58,11 +63,17 @@ def needleman_wunsch(seq1, seq2, b, g):
 
 # Create an empty matrix
 def create_matrix(m, n):
-    return [[0] * n for _ in xrange(m)]
+    return [[0] * n for _ in xrange(m)]  # xrange uses less space than range (?)
 
 
 # Calculate the scoring matrix between organisms
 def scoring_matrix(patient, b, g):
+    """
+    :param patient: Patient of Interest
+    :param b: Blossum Matrix
+    :param g: Gap Penalty
+    :return scoring_matrix: Returns Matrix with all pairwise alignment scores for patient
+    """
     scoring_matrix = create_matrix(len(patient), len(patient))
     d = read_BLOSUM(b)
 
@@ -76,12 +87,19 @@ def scoring_matrix(patient, b, g):
         print(i)
         i = i + 1
 
-    # for line in scoring_matrix:
-    #    print(line)
     return scoring_matrix
 
 
 def calculate_pairwise_alignment(seq_1, seq_2, b, g):
+    """
+    :param seq_1: Str or List
+    :param seq_2:
+    :param b: Blossum Matrix
+    :param g: Gap Penalty
+    :return: Calculates either a pairwise alignment (type(seq_1) = str) or calculates pairwise alignement between
+             first element of seq_1 (type = list) and applies all changes to all further elements of seq_1
+    """
+
     if type(seq_1) == str:
         n = len(seq_1)-1
     else:
@@ -175,6 +193,10 @@ def calculate_pairwise_alignment(seq_1, seq_2, b, g):
 
 
 def calculate_mulitple_alignment(sm):
+    """
+    :param sm: Scoring Matrix from scoring_matrix() methode
+    :return: Prints multiple alignment.
+    """
     for i in range(len(sm)):
         for j in range(len(sm[0])):
             if j >= i:
@@ -188,8 +210,6 @@ def calculate_mulitple_alignment(sm):
 
     set_of_aligned_seq = []
     done = []
-    done_x = []
-    done_y = []
 
     for x in sm:
         for y in x:
