@@ -1,4 +1,4 @@
-# Outline: Bachelorarbeit zum Thema ‚Methodenentwicklung zur Klassifikation des Patienten-Outcomes aufgrund von TCR Sequenzen‘
+### Outline: Bachelorarbeit zum Thema ‚Methodenentwicklung zur Klassifikation des Patienten-Outcomes aufgrund von TCR Sequenzen‘
 
 •	Multiple Sequence Alignment in verschiedenen Modalitäten
 
