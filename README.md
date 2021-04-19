@@ -1,6 +1,6 @@
 # _Methodenentwicklung zur Klassifikation des Patienten-Outcomes aufgrund von TCR Sequenzen_ (BA)
 
-**Nächstes Meeting: 23.04.2021, 11:00**
+**Nächstes Meeting: 23.04.2021, 10:00**
 
 
 ## Outline
@@ -14,7 +14,7 @@
 ## TODO
 
 - Einarbeitung in die BLAST API
-- Debugging von Needleman-Wunsch-Implementierung
+- ~~Debugging von Needleman-Wunsch-Implementierung~~
 - Finden eines sinnvollen Ähnlichkeitsmaßes
 - MSA mit Standardmatrizen
 - MSA mit angepassten (phsyikochemisch motivierten) Matrizen
