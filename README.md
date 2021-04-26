@@ -17,7 +17,7 @@ Siehe MSA_Surevey.pptx
 - MSA mit Standardmatrizen/physiochemischen Matrizen
 - Daten "von Hand" kurieren und dokumentieren, um mögliche "Querschlägersequenzen" ausfindig zu machen -> Qualität des MSA
 - T-Coffee: Verschiedene MSAs für alle Patienten generieren und diese dann mergen / evtl. paarweise betrachten
-- gd-TCR Struktur in PDB betrachten und mit gegebenen Sequenzen mappen 
+- gd-TCR Struktur in PDB betrachten und mit gegebenen Sequenzen mappen :heavy_check_mark:
 - T-Coffe vs. MAFFT vs. ClustalO "Warentest", auch Evaluationsmethoden
 - Jalview Dokumentation: Farbcodes, Formatierungsmöglichkeiten, ...
 - Visualisierungen/Slides zur Präsentation generieren!
