@@ -19,7 +19,10 @@ Siehe MSA_Surevey.pptx
 - T-Coffee: Verschiedene MSAs für alle Patienten generieren und diese dann mergen / evtl. paarweise betrachten
 - gd-TCR Struktur in PDB betrachten und mit gegebenen Sequenzen mappen :heavy_check_mark:
 - T-Coffe vs. MAFFT vs. ClustalO "Warentest", auch Evaluationsmethoden
-- Jalview Dokumentation: Farbcodes, Formatierungsmöglichkeiten, ...
+- Jalview Dokumentation: Farbcodes, Formatierungsmöglichkeiten, ... :heavy_check_mark:
+- Referenzstruktur fixieren für Bindestellen --> Aligniere jede Sequenz auf Referenzsequenz
+-	MSA mit verschiendene Matrizen --> Für MSAs paarweise Distanzen der Sequenzen berechnen. Abstände als Input für      tSNE/UMAP/force-directed graph verwenden
+-	Änhlichkeitsmaße für MSAs recherchieren
 - Visualisierungen/Slides zur Präsentation generieren!
 
 
