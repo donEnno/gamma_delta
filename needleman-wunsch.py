@@ -84,7 +84,7 @@ def scoring_matrix(patient, b, g):
             M = needleman_wunsch(x, y, d, g)
             score_matrix[i][j] = (M[-1][-1], i, j)
             j = j + 1
-        print(i)
+        # print(i)
         i = i + 1
 
     return score_matrix
@@ -123,8 +123,110 @@ def calculate_pairwise_alignment(seq_1, seq_2, b, g):
     #     print(line)
 
     while n > 0 and m > 0:
-        print(n)
-        print(m)
+        # print(n)
+        # print(m)
+
+        replace = sm[n-1][m-1]
+        insert = sm[n][m-1]
+        delete = sm[n-1][m]
+        best_option = max(replace, insert, delete)
+
+        if replace == best_option:
+            if type(seq_1) == str:
+                sequence = seq_1[n] + sequence
+            else:
+                for i in range(len(seq_1)):
+                    sequences[i] = seq_1[i][n] + sequences[i]
+            alignment = seq_2[m] + alignment
+            n = n - 1
+            m = m - 1
+
+        elif insert == best_option:
+            if type(seq_1) == str:
+                sequence = "*" + sequence
+            else:
+                for i in range(len(seq_1)):
+                    sequences[i] = '*' + sequences[i]
+            alignment = seq_2[m] + alignment
+            m = m - 1
+
+        elif delete == best_option:
+            if type(seq_1) == str:
+                sequence = seq_1[n] + sequence
+            else:
+                for i in range(len(seq_1)):
+                    sequences[i] = seq_1[i][n] + sequences[i]
+            alignment = "*" + alignment
+            n = n - 1
+        else:
+            return "f"
+
+    if n == 0 and m == 0:
+        if type(seq_1) == str:
+            sequence = seq_1[n] + sequence
+        else:
+            for i in range(len(seq_1)):
+                sequences[i] = seq_1[i][n] + sequences[i]
+        alignment = seq_2[m] + alignment
+    elif n == 0 and m > 0:
+        if type(seq_1) == str:
+            sequence = "*" + sequence
+        else:
+            for i in range(len(seq_1)):
+                sequences[i] = '*' + sequences[i]
+        alignment = seq_2[m] + alignment
+    elif m == 0 and n > 0:
+        if type(seq_1) == str:
+            sequence = seq_1[n] + sequence
+        else:
+            for i in range(len(seq_1)):
+                sequences[i] = seq_1[i][n] + sequences[i]
+        alignment = "*" + alignment
+    else:
+        return "f"
+
+    if type(seq_1) == str:
+        return [sequence, alignment]
+    else:
+        sequences.append(alignment)
+        return sequences
+
+
+def calculate_pairwise_alignment_v2(seq_1, seq_2, b, g):
+    """
+    :param seq_1: List
+    :param seq_2:
+    :param b: Blossum Matrix
+    :param g: Gap Penalty
+    :return: Calculates either a pairwise alignment (type(seq_1) = str) or calculates pairwise alignement between
+             first element of seq_1 (type = list) and applies all changes to all further elements of seq_1
+    """
+
+    if type(seq_1) == str:
+        n = len(seq_1)-1
+    else:
+        n = len(seq_1[0]) - 1
+
+    m = len(seq_2)-1
+    d = read_BLOSUM(b)
+
+    if type(seq_1) == str:
+        sequence = ""
+    else:
+        sequences = ['' for i in range(len(seq_1))]
+    alignment = ""
+
+    if type(seq_1) == str:
+        sm = needleman_wunsch(seq_1, seq_2, d, g)
+    else:
+        sm = needleman_wunsch(seq_1[0], seq_2, d, g)
+
+    # for line in sm:
+    #     print(line)
+
+    while n > 0 and m > 0:
+        # print(n)
+        # print(m)
 
         replace = sm[n-1][m-1]
         insert = sm[n][m-1]
@@ -247,6 +349,7 @@ def calculate_mulitple_alignment(df, sm):
     sm[ID_seq2][ID_seq1] = (0, 0, 0)            # Don't know yet which one.
 
     while c <= len(sm):
+        # print(c)
         # Reset.
         current = (0, 0, 0)
         max_score = 0
@@ -255,7 +358,7 @@ def calculate_mulitple_alignment(df, sm):
         for x in ID_done:
             # Horizontal
             for y in sm[x]:
-                if y[1] in ID_done or y[2] in ID_done:
+                if y[1] in ID_done and y[2] in ID_done:
                     continue
                 if y[0] > max_score:
                     max_score = y[0]
@@ -263,7 +366,7 @@ def calculate_mulitple_alignment(df, sm):
 
             for i in range(len(sm)):
                 y = sm[i][x]
-                if y[1] in ID_done or y[2] in ID_done:
+                if y[1] in ID_done and y[2] in ID_done:
                     continue
                 if y[0] > max_score:
                     max_score = y[0]
@@ -273,17 +376,19 @@ def calculate_mulitple_alignment(df, sm):
         ID_seq2 = current[2]
 
         if ID_seq1 not in ID_done:
-            set_of_aligned_seq = calculate_pairwise_alignment(set_of_aligned_seq, df['cdr3aa'][ID_seq2], BLSM50, -5)
+            temp = calculate_pairwise_alignment(set_of_aligned_seq, df['cdr3aa'][ID_seq2], BLSM50, -5)
+            set_of_aligned_seq = temp
             ID_done.append(ID_seq1)
         if ID_seq2 not in ID_done:
-            set_of_aligned_seq = calculate_pairwise_alignment(set_of_aligned_seq, df['cdr3aa'][ID_seq1], BLSM50, -5)
+            temp = calculate_pairwise_alignment(set_of_aligned_seq, df['cdr3aa'][ID_seq1], BLSM50, -5)
+            set_of_aligned_seq = temp
             ID_done.append(ID_seq2)
 
         sm[ID_seq1][ID_seq2] = (0, 0, 0)
         sm[ID_seq2][ID_seq1] = (0, 0, 0)
 
         c += 1
-    print(ID_done)
+    # print(ID_done)
     for line in set_of_aligned_seq:
         print(line)
 
@@ -295,7 +400,7 @@ patient1 = all_patients[0]
 patient2 = all_patients[1]
 
 # Cut patient 1 short for testing purpose
-patient1 = patient1[:10]
+# patient1 = patient1[:10]
 
 sm_patient1 = scoring_matrix(patient1, 'needle/blosum50.txt', -5)
 # print('Matrix done.')
