@@ -23,9 +23,9 @@ Siehe MSA_Surevey.pptx
 - T-Coffe vs. MAFFT vs. ClustalO "Warentest", auch Evaluationsmethoden :heavy_check_mark:
 - Jalview Dokumentation: Farbcodes, Formatierungsmöglichkeiten, ... :heavy_check_mark:
 - Referenzstruktur fixieren für Bindestellen --> Aligniere jede Sequenz auf Referenzsequenz :warning:
--	MSA mit verschiendene Matrizen --> Für MSAs paarweise Distanzen der Sequenzen berechnen. Abstände als Input für      tSNE/UMAP/force-directed graph verwenden
+-	MSA mit verschiendene Matrizen --> Für MSAs paarweise Distanzen der Sequenzen berechnen. Abstände als Input für      tSNE/UMAP/force-directed graph verwenden :warning: :heavy_check_mark:
 -	Änhlichkeitsmaße für MSAs recherchieren
-- Visualisierungen/Slides zur Präsentation generieren!
+- Visualisierungen/Slides zur Präsentation generieren! :heavy_check_mark:
 
 
 ## Anstehend
