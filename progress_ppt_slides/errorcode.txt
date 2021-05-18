@@ -1,0 +1,19 @@
+ssh://ubuntu@193.196.29.34:22/usr/bin/python3.8 -u /home/ubuntu/Enno/gammaDelta/projection.py
+/usr/local/lib/python3.8/dist-packages/umap/plot.py:20: UserWarning: The umap.plot package requires extra plotting libraries to be installed.
+    You can install these via pip using
+
+    pip install umap-learn[plot]
+
+    or via conda using
+
+     conda install pandas matplotlib datashader bokeh holoviews colorcet scikit-image
+
+  warn(
+Traceback (most recent call last):
+  File "/home/ubuntu/Enno/gammaDelta/projection.py", line 8, in <module>
+    import umap.plot
+  File "/usr/local/lib/python3.8/dist-packages/umap/plot.py", line 31, in <module>
+    raise ImportError(
+ImportError: umap.plot requires pandas matplotlib datashader bokeh holoviews scikit-image and colorcet to be installed
+
+Process finished with exit code 1
