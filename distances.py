@@ -62,8 +62,8 @@ def parallel_fasta_to_distance_matrix_v2(patient, substitution_matrix):
 
     Calculates distance matrix from FASTA-file and saves as csv.
     """
-
-    file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
+    # TODO file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
+    file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
     if patient == 0:
         file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
 
@@ -72,15 +72,16 @@ def parallel_fasta_to_distance_matrix_v2(patient, substitution_matrix):
     output_filename_memmap = r'/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'
     output = np.memmap(output_filename_memmap, dtype=float, shape=(n, n), mode='w+')
 
-    Parallel(n_jobs=32, verbose=50)(delayed(pairwise_score_v2)(seqA, substitution_matrix, output, patient)
+    Parallel(n_jobs=28, verbose=50)(delayed(pairwise_score_v2)(seqA, substitution_matrix, output, patient)
                                     for seqA in enumerate(SeqIO.parse(file, "fasta")))
 
-    dump(output, fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX')
+    dump(output, fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX')
 
 
 def pairwise_score_v2(seqa, substitution_matrix, output, patient):
     matrix = substitution_matrices.load(substitution_matrix)
-    file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
+    # TODO file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
+    file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
 
     for seqb in enumerate(SeqIO.parse(file, "fasta")):
         res_ = pairwise2.align.globalds(seqa[1].seq, seqb[1].seq, matrix, -10, -0.5, score_only=True)
@@ -103,7 +104,8 @@ def calculate_distance_matrices():
 
 if __name__ == '__main__':
 
-    toc = time.time()
-    calculate_distance_matrices()
-    tic = time.time()
-    print("Time elapsed: ", str(tic - toc))
+    for matrix in ['BLOSUM45', 'BLOSUM80', 'GONNET1992']:
+        toc = time.time()
+        parallel_fasta_to_distance_matrix_v2(0, matrix)
+        tic = time.time()
+        dump(f"{matrix} time elapsed: ", str(tic - toc))

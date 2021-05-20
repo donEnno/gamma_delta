@@ -20,10 +20,7 @@ import matplotlib.pyplot as plt
 import community as community_louvain
 import matplotlib.cm as cm
 import networkx as netx
-
 import sklearn.cluster as cluster
-from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
-# import hdbscan
 
 
 def plot_umap(patient, substitution_matrix, num_clusters=5, plot=False, kmeans=False, louvain=False):
@@ -35,15 +32,15 @@ def plot_umap(patient, substitution_matrix, num_clusters=5, plot=False, kmeans=F
     :param kmeans: booelan, toggle k-means clustering plot
     :param louvain: booelan, toggle louvain clustering plot
 
-    :raises ValueError for patient=2, substitution_matrix='BLOSUM45','GONNET1992'
-
     """
     sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
     t0 = time.time()
-    patient1_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX')
-    nx, ny = patient1_data.shape
-    p1_df = pd.DataFrame(data=patient1_data, index=[f'Sequence_{i}' for i in range(1, nx+1)],
+    # PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX
+    patient_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/ALL_SEQUENCES_BLOSUM45_DISTANCE_MATRIX')
+    # patient_data = load(r'C:\Users\Enno\PycharmProjects\gamma_delta\data\distance_matrices\ALL_SEQUENCES_BLOSUM45_DISTANCE_MATRIX')
+    nx, ny = patient_data.shape
+    p1_df = pd.DataFrame(data=patient_data, index=[f'Sequence_{i}' for i in range(1, nx+1)],
                                            columns=[f'Sequence_{i}' for i in range(1, ny+1)])
 
     reducer = umap.UMAP()
@@ -63,21 +60,63 @@ def plot_umap(patient, substitution_matrix, num_clusters=5, plot=False, kmeans=F
         plt.show()
 
     if louvain:
-        G = netx.from_numpy_array(patient1_data)
+        print("louvain check")
+        G = netx.from_numpy_array(patient_data)
+        print("G check")
 
         # degrees = G.degree()
-        # print(dict(degrees).values
+        # print(dict(degrees).values)
         # degrees = G.degree(weight='weight')
         # print(dict(degrees).values())
 
         partition = community_louvain.best_partition(G)
-
+        print("partition check")
         # plot the graph
         cmap = cm.get_cmap('viridis', max(partition.values()) + 1)
         plt.scatter(embedding[:, 0], embedding[:, 1], c=list(partition.values()), cmap=cmap)
+        print("scatter check")
         plt.title(f'Louvain com. det. in UMAP projection of Patient {patient} using {substitution_matrix}')
         plt.show()
 
 
+def numpy_to_graph(ix, row):
+    # TODO Method that adds each row to the graph to then parallelize it.
+    g = netx.Graph()
+
+    for iy, i in enumerate(row):
+        g.add_edge(ix, iy, Weight=i)
+
+    return g
+
+
 if __name__ == '__main__':
-    pass
+
+    plot_umap(0, 'BLOSUM45', louvain=True)
+
+    """
+    LOCATE ValueError
+    patient2_B45_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_2_BLOSUM45_DISTANCE_MATRIX')
+    patient2_B80_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_2_BLOSUM80_DISTANCE_MATRIX')
+    patient2_G92_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_2_GONNET1992_DISTANCE_MATRIX')
+
+    G_P2_B45 = netx.from_numpy_array(patient2_B45_data)
+    G_P2_B80 = netx.from_numpy_array(patient2_B80_data)
+    G_P2_G92 = netx.from_numpy_array(patient2_G92_data)
+
+    degrees_B45 = G_P2_B45.degree()
+    degrees_B80 = G_P2_B80.degree()
+    degrees_G92 = G_P2_G92.degree()
+
+    print(dict((k, v) for k, v in degrees_B45 if v <= 0))
+    print(dict((k, v) for k, v in degrees_B80 if v <= 0))
+    print(dict((k, v) for k, v in degrees_G92 if v <= 0))
+
+    # result = dict((k, v) for k, v in ini_dict.items() if v >= 0)
+
+    weights_B45 = G_P2_B45.degree(weight='weight')
+    weights_B80 = G_P2_B80.degree(weight='weight')
+    weights_G92 = G_P2_G92.degree(weight='weight')
+
+    print(dict((k, v) for k, v in weights_B45 if v <= 0))
+    print(dict((k, v) for k, v in weights_B80 if v <= 0))
+    print(dict((k, v) for k, v in weights_G92 if v <= 0))"""
