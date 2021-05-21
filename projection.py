@@ -36,8 +36,8 @@ def plot_umap(patient, substitution_matrix, num_clusters=5, plot=False, kmeans=F
     sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
     t0 = time.time()
-    # PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX
-    patient_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/ALL_SEQUENCES_BLOSUM45_DISTANCE_MATRIX')
+    # ALL_SEQUENCES_BLOSUM45_DISTANCE_MATRIX
+    patient_data = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX')
     # patient_data = load(r'C:\Users\Enno\PycharmProjects\gamma_delta\data\distance_matrices\ALL_SEQUENCES_BLOSUM45_DISTANCE_MATRIX')
     nx, ny = patient_data.shape
     p1_df = pd.DataFrame(data=patient_data, index=[f'Sequence_{i}' for i in range(1, nx+1)],
@@ -60,9 +60,9 @@ def plot_umap(patient, substitution_matrix, num_clusters=5, plot=False, kmeans=F
         plt.show()
 
     if louvain:
-        print("louvain check")
+        # print("louvain check")
         G = netx.from_numpy_array(patient_data)
-        print("G check")
+        # print("G check")
 
         # degrees = G.degree()
         # print(dict(degrees).values)
@@ -70,12 +70,13 @@ def plot_umap(patient, substitution_matrix, num_clusters=5, plot=False, kmeans=F
         # print(dict(degrees).values())
 
         partition = community_louvain.best_partition(G)
-        print("partition check")
+        # print("partition check")
         # plot the graph
         cmap = cm.get_cmap('viridis', max(partition.values()) + 1)
         plt.scatter(embedding[:, 0], embedding[:, 1], c=list(partition.values()), cmap=cmap)
-        print("scatter check")
+        # print("scatter check")
         plt.title(f'Louvain com. det. in UMAP projection of Patient {patient} using {substitution_matrix}')
+        plt.savefig(fr'/home/ubuntu/Enno/gammaDelta/plots/PATIENT_{patient}_{substitution_matrix}.png')
         plt.show()
 
 
@@ -91,7 +92,12 @@ def numpy_to_graph(ix, row):
 
 if __name__ == '__main__':
 
-    plot_umap(0, 'BLOSUM45', louvain=True)
+    for patient in range(1, 30):
+        for matrix in ['BLOSUM45', 'BLOSUM80', 'GONNET1992']:
+            try:
+                plot_umap(patient, matrix, louvain=True)
+            except ValueError:
+                pass
 
     """
     LOCATE ValueError
