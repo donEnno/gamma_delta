@@ -9,42 +9,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import umap
 import umap.plot
-
+from networkit import *
 
 def get_num_seq(f):
     num = len([1 for line in open(f) if line.startswith(">")])
     return num
-
-
-def parallel_fasta_to_distance_matrix_v1(patient, substitution_matrix):
-    """
-    :param patient: FASTA-file
-    :param substitution_matrix: String (e.g. "BLOSUM45", "GONNET1992")
-
-    Calculates distance matrix from FASTA-file and saves as csv.
-    """
-
-    file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
-    if patient == 0:
-        file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
-
-    n = get_num_seq(file)
-
-    output_filename_memmap = r'/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'
-    output = np.memmap(output_filename_memmap, dtype=float, shape=(n, n), mode='w+')
-
-    Parallel(n_jobs=32, verbose=50)(delayed(pairwise_score_v1)(seqA, seqB, substitution_matrix, output)
-                        for seqA in enumerate(SeqIO.parse(file, "fasta"))
-                        for seqB in enumerate(SeqIO.parse(file, "fasta")))
-
-    save_dir = r'/home/ubuntu/Enno/gammaDelta/distance_matrices/'
-    dump(output, fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX')
-
-
-def pairwise_score_v1(seqa, seqb, substitution_matrix, output):
-    matrix = substitution_matrices.load(substitution_matrix)
-    res_ = pairwise2.align.globalds(seqa[1].seq, seqb[1].seq, matrix, -10, -0.5, score_only=True)
-    output[seqa[0]][seqb[0]] = res_
 
 """
 Available substitution matrices:
@@ -55,7 +24,7 @@ Available substitution matrices:
 
 """
 
-def parallel_fasta_to_distance_matrix_v2(patient, substitution_matrix):
+def parallel_fasta_to_distance_matrix(patient, substitution_matrix):
     """
     :param patient: FASTA-file
     :param substitution_matrix: String (e.g. "BLOSUM45", "GONNET1992")
@@ -72,13 +41,13 @@ def parallel_fasta_to_distance_matrix_v2(patient, substitution_matrix):
     output_filename_memmap = r'/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'
     output = np.memmap(output_filename_memmap, dtype=float, shape=(n, n), mode='w+')
 
-    Parallel(n_jobs=28, verbose=50)(delayed(pairwise_score_v2)(seqA, substitution_matrix, output, patient)
+    Parallel(n_jobs=28, verbose=50)(delayed(pairwise_score)(seqA, substitution_matrix, output, patient)
                                     for seqA in enumerate(SeqIO.parse(file, "fasta")))
 
     dump(output, fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX')
 
 
-def pairwise_score_v2(seqa, substitution_matrix, output, patient):
+def pairwise_score(seqa, substitution_matrix, output, patient):
     matrix = substitution_matrices.load(substitution_matrix)
     # TODO file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
     file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
@@ -99,7 +68,7 @@ def calculate_distance_matrices():
         print("Current substitution matrix: ", sm)
         for p in p_batch:
             print("Working on patient ", str(p))
-            parallel_fasta_to_distance_matrix_v2(p, sm)
+            parallel_fasta_to_distance_matrix(p, sm)
 
 
 if __name__ == '__main__':
@@ -108,4 +77,4 @@ if __name__ == '__main__':
         toc = time.time()
         parallel_fasta_to_distance_matrix_v2(0, matrix)
         tic = time.time()
-        dump(f"{matrix} time elapsed: ", str(tic - toc))
+        dump(f"{matrix} time elapsd: ", str(tic - toc))
