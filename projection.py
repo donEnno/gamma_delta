@@ -1,32 +1,20 @@
 # Default
-import os.path
-import time
-
 import joblib
-import networkit
 import numexpr
-
-from distances import get_num_seq
-
-
-# UMAP dependencies
 import numpy as np
 import pandas as pd
+
+# UMAP dependencies
 import seaborn as sns
-import datashader
-import bokeh
-import holoviews
-import colorcet
 
 # Dimension reduction and clustering
 import umap
 import umap.plot
-import matplotlib.pyplot as plt
+import networkit
+import networkx as nx
 from community import community_louvain
 import matplotlib.cm as cm
-import networkx as nx
-import sklearn.cluster as cluster
-from networkit import *
+import matplotlib.pyplot as plt
 
 # To avoid
 # INFO:numexpr.utils:Note: NumExpr detected 28 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
@@ -34,13 +22,15 @@ from networkit import *
 numexpr.MAX_THREADS = 14
 
 
-def get_umap(df, patient, substitution_matrix, show=False):
+def get_umap(df: pd.DataFrame, patient: int, substitution_matrix: str, show=False):
     """
+    Reduces the input data into two-dimensional space using the UMAP method.
+
     :param df: pandas df
     :param patient: int, used #patient
     :param substitution_matrix: used substitution matrix,
     :param show: boolean, toggle UMAP projection plot
-    :return numpy.ndarray
+    :return Reduced data np.ndarray
     """
     sns.set(style='white', context='notebook', rc={'figure.figsize': (14, 10)})
 
@@ -56,27 +46,31 @@ def get_umap(df, patient, substitution_matrix, show=False):
     return embedding
 
 
-def numpy_to_nk_graph(dist_mat):
+def numpy_to_nk_graph(dist_mat: np.ndarray):
     """
-    :param dist_mat: numpy array
+    Converts a distance matrix to a NetworKit graph object.
+
+    :param dist_mat: Input-distance matrix,
     :return: NetworKit graph of dist_mat
     """
     m, _ = dist_mat.shape
-    G = networkit.Graph(m, weighted=True)
+    g = networkit.Graph(m, weighted=True)
 
     mask_x, mask_y = np.mask_indices(m, np.tril, -1)
     masking_zip = zip(mask_x, mask_y, dist_mat[mask_x, mask_y])
 
     for nodeA, nodeB, weight in masking_zip:
-        G.addEdge(nodeA, nodeB, weight)
+        g.addEdge(nodeA, nodeB, weight)
 
-    return G
+    return g
 
 
-def numpy_to_nx_graph(dist_mat):
+def numpy_to_nx_graph(dist_mat: np.ndarray):
     """
-    :param dist_mat: numpy array
-    :return: networkx graph of dist_mat
+    Converts a distance matrix to a networkx graph object.
+
+    :param dist_mat: Input distance-matrix.
+    :return: Networkx graph of dist_mat
     """
     g = nx.Graph(weighted=True)
 
@@ -86,16 +80,22 @@ def numpy_to_nx_graph(dist_mat):
     return g
 
 
-def plot_louvain(patient, substitution_matrix, n, resolution=1.0, gamma=1.0, save_partition=False, save_plot=False, show=False):
+def plot_louvain(patient: int, substitution_matrix: str, n: bool, resolution=1.0, gamma=1.0, save_partition=False,
+                 save_plot=False, show=False):
     """
-    :param patient: int, desired patient, 0 for all patients
-    :param substitution_matrix: string, desired substitution matrix, all caps
-    :param n: boolean, True for networkx-based Louvain algo, False for NetworKit-based algorithm
-    :param resolution: float, resolution in networkx approach
-    :param gamma: float, resolution in NetworKit approach
-    :param save_partition: boolean, toggle for saving partition to file
-    :param save_plot: boolean, toggle for saving plot to file
-    :param show: boolean, toggle for plt.show()
+    Plots the result of the Louvain community detection algorithm in a UMAP. One can either you use a networkx-based
+    version of the algorithm or a NetworKit-based version. \n
+    It is optional to either save the plot or the partitions found.
+
+    :param patient: Desired patient, 0 for all patients
+    :param substitution_matrix: Desired substitution matrix, all caps
+    :param n: True for networkx-based Louvain algo, False for NetworKit-based algorithm
+    :param resolution: Resolution in networkx approach
+    :param gamma: Resolution in NetworKit approach
+    :param save_partition:Toggle for saving partition to file
+    :param save_plot: Toggle for saving plot to file
+    :param show: Toggle for plt.show()
+    :returns None
     """
 
     if patient == 0:
@@ -114,20 +114,21 @@ def plot_louvain(patient, substitution_matrix, n, resolution=1.0, gamma=1.0, sav
 
     # CREATE GRAPH
     if n:
-        G = numpy_to_nx_graph(patient_distance_matrix)
+        g = numpy_to_nx_graph(patient_distance_matrix)
     else:
-        G = numpy_to_nk_graph(patient_distance_matrix)
+        g = numpy_to_nk_graph(patient_distance_matrix)
 
     # DETECT COMMUNITIES
     if n:
-        partition = community_louvain.best_partition(G, resolution=resolution)
+        partition = community_louvain.best_partition(g, resolution=resolution)
     else:
-        partition = networkit.community.detectCommunities(G, algo=networkit.community.PLM(G, refine=True, gamma=gamma))
+        partition = networkit.community.detectCommunities(g, algo=networkit.community.PLM(g, refine=True, gamma=gamma))
     if save_partition:
-        if n: subname = f'_resolution={resolution}_'
-        else: subname = f'_gamma={gamma}_'
-        joblib.dump(partition,
-                    fr'/home/ubuntu/Enno/gammaDelta/partition/patient_{patient}_{substitution_matrix}{subname}communities')
+        if n:
+            subname = f'_resolution={resolution}_'
+        else:
+            subname = f'_gamma={gamma}_'
+        joblib.dump(partition, fr'/home/ubuntu/Enno/gammaDelta/partition/patient_{patient}_{substitution_matrix}{subname}communities')
 
     # PLOT LOUVAIN CLUSTERING
     if n:
@@ -146,6 +147,4 @@ def plot_louvain(patient, substitution_matrix, n, resolution=1.0, gamma=1.0, sav
 
 
 if __name__ == '__main__':
-    plot_louvain(0, 'BLOSUM45', n=False, gamma=1.05, show=True)
-
-
+    plot_louvain(1, 'BLOSUM45', n=False, gamma=1.05, show=True)
