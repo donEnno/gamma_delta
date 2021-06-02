@@ -1,7 +1,6 @@
 import numpy as np
 from joblib import load
-import pandas as pd
-import os
+
 
 # # # # # # # # # # # # # # # # RESULT OF NX BASED METHOD # # # # # # # # # # # # # # # # # # #
 parti_on = load('/home/ubuntu/Enno/gammaDelta/partition/all_patients_BLOSUM45_communities')   #
@@ -50,7 +49,6 @@ def get_frequencies(partition: dict, absolute_toggle=False):
     num_patients = 29
     num_seq_per_patient = [patient_get_num_sequences(i) for i in range(1, num_patients+1)]
 
-    lower = 0
     upper = 0
     for i in num_seq_per_patient:
         lower = upper
