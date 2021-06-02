@@ -101,4 +101,4 @@ def calculate_distance_matrices():
 
 if __name__ == '__main__':
 
-    calculate_distance_matrices()
+    get_num_seq(fr'/home/ubuntu/Enno/gammaDelta/patients/patient_1.fasta')
