@@ -1,14 +1,15 @@
 # _Methodenentwicklung zur Klassifikation des Patienten-Outcomes aufgrund von TCR Sequenzen_ (BA)
 
 **Vergangene Meetings:** 
-23.04.2021, 10:00
-24.30.04.2021, 11:00
-Siehe MSA_Survey.pptx
-07.05.2021, 14:00
-Siehe Graph_Survey.pptx
-14.05.2021, 14:00
-21.05.2021, 14:00
-04.06.2021, 14:00
+
+23.04.2021, 10:00  
+24.30.04.2021, 11:00  
+Siehe MSA_Survey.pptx  
+07.05.2021, 14:00  
+Siehe Graph_Survey.pptx  
+14.05.2021, 14:00  
+21.05.2021, 14:00  
+04.06.2021, 14:00  
 
 **Nächstes Meeting: 21.05.2021, 14:00**
 
