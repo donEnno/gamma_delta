@@ -130,6 +130,7 @@ def calculate_partitions(patient: int, substitution_matrix: str, netx: bool, res
             dump(partition,
                         fr'/home/ubuntu/Enno/gammaDelta/partition/nx/patient_{patient}_{substitution_matrix}{subname}communities')
     else:
+        print('gamma: ', gamma)
         partition = networkit.community.detectCommunities(g, algo=networkit.community.PLM(g, refine=True, gamma=gamma))
         if save_partition:
             subname = f'_gamma={gamma}_'

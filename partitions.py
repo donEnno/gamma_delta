@@ -1,4 +1,5 @@
 import numpy as np
+from projection import calculate_partitions
 
 # # # # # # # # # # # # # # # # RESULT OF NX BASED METHOD # # # # # # # # # # # # # # # # # # #
 # parti_on = load('/home/ubuntu/Enno/gammaDelta/partition/all_patients_BLOSUM45_communities')
@@ -71,3 +72,46 @@ def get_frequencies(partition, absolute_toggle=False):
         return np.array(absolute)
 
     return np.array(relative)
+
+
+def get_cluster_membership(patient_list: list, num: int):
+    """
+    :param patient_list: List of tuples (s, c), where s is #sequence and c is its assigned community.
+    :param num: Total number of communities.
+    :return: List of absolute frequencies for one patient.
+    """
+    frequency = [[] for i in range(num)]
+
+    for s, c in patient_list:
+        frequency[c].append(s)
+
+    return np.array(frequency)
+
+
+def compute_overlap(partition_1):
+    """
+    Returns a np.array of shape (num_patients, num_communities) with community frequencies.
+    :param partition_1: Result of nx-based Louvain algorithm.
+    :param absolute_toggle: Set True to return absolute frequencies.
+    """
+    absolute = []
+    relative = []
+
+    num_patients = 29
+    total_num_seq = 10711
+
+    partition_1 = partition_1.getVector()
+    num_partitions = len(np.unique(partition_1))
+    partition_1 = list(zip(range(total_num_seq), partition_1))
+
+    # partition_2 = partition_2.getVector()
+    # num_partitions = len(np.unique(partition_2))
+    # partition_2 = list(zip(range(total_num_seq), partition_2))
+
+    temp = get_cluster_membership(partition_1, num_partitions)
+
+    return np.array(temp)
+
+
+b45_partition = calculate_partitions(0, 'BLOSUM45', netx=False, gamma=1.06)
+print(compute_overlap(b45_partition))
