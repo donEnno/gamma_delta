@@ -1,13 +1,25 @@
+# Default
 import matplotlib.pyplot as plt
 import numpy as np
+from joblib import load
+
+# Pipeline
+from partitions import get_frequencies
+from projection import calculate_partitions
+
+# ML
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 
-x = []
+partition = calculate_partitions(0, 'BLOSUM45', netx=False, resolution=1.045)
+
+x = get_frequencies(partition, absolute_toggle=True)
 y = []
 
 # LogisticRegressionCV for cross-validation
-model = LogisticRegression(solver='liblinear', random_state=0).fit(x, y)
+# model = LogisticRegression(solver='liblinear', random_state=0).fit(x, y)
+
+
 """
 model.classes_
 model.intercept_

@@ -1,9 +1,10 @@
 import numpy as np
-from joblib import load
-
 
 # # # # # # # # # # # # # # # # RESULT OF NX BASED METHOD # # # # # # # # # # # # # # # # # # #
-parti_on = load('/home/ubuntu/Enno/gammaDelta/partition/all_patients_BLOSUM45_communities')   #
+# parti_on = load('/home/ubuntu/Enno/gammaDelta/partition/all_patients_BLOSUM45_communities')
+# parti_on = load("/home/ubuntu/Enno/gammaDelta/partition/nx/patient_10_BLOSUM45_resolution=0.875_communities")
+# parti_on = plot_louvain(0, 'BLOSUM45', netx=False, gamma=1.045)
+# print(parti_on)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
@@ -34,7 +35,7 @@ def count_frequency(patient_list: list, num: int):
     return frequency
 
 
-def get_frequencies(partition: dict, absolute_toggle=False):
+def get_frequencies(partition, absolute_toggle=False):
     """
     Returns a np.array of shape (num_patients, num_communities) with community frequencies.
     :param partition: Result of nx-based Louvain algorithm.
@@ -43,11 +44,17 @@ def get_frequencies(partition: dict, absolute_toggle=False):
     absolute = []
     relative = []
 
-    num_partitions = max(partition.values())+1
-    partition = list(partition.items())
-
     num_patients = 29
     num_seq_per_patient = [patient_get_num_sequences(i) for i in range(1, num_patients+1)]
+    total_num_seq = sum(num_seq_per_patient)
+
+    if type(partition) == dict:
+        num_partitions = max(partition.values())+1
+        partition = list(partition.items())
+    else:
+        partition = partition.getVector()
+        num_partitions = len(np.unique(partition))
+        partition = list(zip(range(total_num_seq), partition))
 
     upper = 0
     for i in num_seq_per_patient:

@@ -1,24 +1,21 @@
 # Default
-import time
-
-import Bio.Seq
 import numpy as np
-import pandas as pd
 from joblib import Parallel, delayed, dump
 
 # Biopython
+import Bio.Seq
 from Bio import SeqIO, pairwise2
 from Bio.Align import substitution_matrices
 
 
-"""
-Available substitution matrices in biopython:
-
-['BENNER22', 'BENNER6', 'BENNER74', 'BLOSUM45', 'BLOSUM50', 'BLOSUM62', 'BLOSUM80', 'BLOSUM90', 'DAYHOFF', 'FENG', 
- 'GENETIC', 'GONNET1992', 'HOXD70', 'JOHNSON', 'JONES', 'LEVIN', 'MCLACHLAN', 'MDM78', 'NUC.4.4', 'PAM250', 'PAM30', 
- 'PAM70', 'RAO', 'RISLER', 'SCHNEIDER', 'STR', 'TRANS']
-
-"""
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+#                                Available substitution matrices in Biopython                                         #
+#                                                                                                                     #
+#   'BENNER22', 'BENNER6', 'BENNER74', 'BLOSUM45', 'BLOSUM50', 'BLOSUM62', 'BLOSUM80', 'BLOSUM90', 'DAYHOFF', 'FENG'  #
+#  'GENETIC', 'GONNET1992', 'HOXD70', 'JOHNSON', 'JONES', 'LEVIN', 'MCLACHLAN', 'MDM78', 'NUC.4.4', 'PAM250', 'PAM30' #
+#                            'PAM70', 'RAO', 'RISLER', 'SCHNEIDER', 'STR', 'TRANS'                                    #
+#                                                                                                                     #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
 def get_num_seq(file):
@@ -30,7 +27,7 @@ def get_num_seq(file):
     return num
 
 
-def parallel_fasta_to_distance_matrix(patient: int, substitution_matrix: str, go: int, ge: int):
+def parallel_fasta_to_distance_matrix(patient: int, substitution_matrix: str, go: int, ge: float):
     """
     Calculates distance matrix from FASTA-file in a parallel way and joblib.dumps it to a file.
 
@@ -60,7 +57,7 @@ def parallel_fasta_to_distance_matrix(patient: int, substitution_matrix: str, go
              fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
 
 
-def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: int, seqa: Bio.Seq.Seq, output: np.memmap):
+def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, seqa: Bio.Seq.Seq, output: np.memmap):
     """
     Calculates the pairwise score of seqa to every other sequence in the patient dataset.
 
@@ -96,7 +93,7 @@ def calculate_distance_matrices():
         print("Current substitution matrix: ", sm)
         for p in p_batch:
             print("Working on patient ", str(p))
-            parallel_fasta_to_distance_matrix(p, sm)
+            parallel_fasta_to_distance_matrix(p, sm, 10, 0.5)
 
 
 if __name__ == '__main__':
