@@ -1,4 +1,6 @@
 # Default
+import time
+
 import numpy as np
 from joblib import Parallel, delayed, dump
 
@@ -6,6 +8,7 @@ from joblib import Parallel, delayed, dump
 import Bio.Seq
 from Bio import SeqIO, pairwise2
 from Bio.Align import substitution_matrices
+from Bio.Align.Applications import ClustalOmegaCommandline
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -27,37 +30,31 @@ def get_num_seq(file):
     return num
 
 
-def parallel_fasta_to_distance_matrix(patient: int, substitution_matrix: str, go: int, ge: float):
+def parallel_fasta_to_distance_matrix(patient: str, substitution_matrix: str, go: int, ge: float):
     """
     Calculates distance matrix from FASTA-file in a parallel way and joblib.dumps it to a file.
 
     :param go: GapOpening penalty for pairwise alignment score. Must be a positive.
     :param ge: GapExtension penalty for pairwise alignment score. Must be positive.
-    :param patient: Number of desired patient. 0 for all patients.
+    :param patient: Name of desired patient group: 'BLHD', 'BL', 'HD', 'FU'
     :param substitution_matrix: String (e.g. "BLOSUM45", "GONNET1992")
     """
 
-    if patient == 0:
-        file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
-    else:
-        file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
 
     n = get_num_seq(file)
 
-    output_filename_memmap = r'/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'
-    output = np.memmap(output_filename_memmap, dtype=float, shape=(n, n), mode='w+')
+    output_filename_memmap = '/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'
+    output = np.memmap(output_filename_memmap, dtype=float, mode='w+', shape=(n, n))
 
-    Parallel(n_jobs=28, verbose=50)(delayed(pairwise_score)(patient, substitution_matrix, go, ge, seqA, output)
+    Parallel(n_jobs=-1, verbose=50)(delayed(pairwise_score)(patient, substitution_matrix, go, ge, seqA, output)
                                     for seqA in enumerate(SeqIO.parse(file, "fasta")))
-    if patient == 0:
-        dump(output,
-             fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
-    else:
-        dump(output,
-             fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
+
+    dump(output,
+         fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/{patient}_ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
 
 
-def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, seqa: Bio.Seq.Seq, output: np.memmap):
+def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, seqa: Bio.Seq.Seq, output):
     """
     Calculates the pairwise score of seqa to every other sequence in the patient dataset.
 
@@ -71,10 +68,7 @@ def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, s
 
     matrix = substitution_matrices.load(substitution_matrix)
 
-    if patient == 0:
-        file = fr'/home/ubuntu/Enno/gammaDelta/patients/all_sequences.fasta'
-    else:
-        file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{patient}.fasta'
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
 
     for seqb in enumerate(SeqIO.parse(file, "fasta")):
         res_ = pairwise2.align.globalds(seqa[1].seq, seqb[1].seq, matrix, -go, -ge, score_only=True)
@@ -88,14 +82,10 @@ def calculate_distance_matrices():
     """
 
     sm_batch = ["BLOSUM45", "BLOSUM80", "GONNET1992"]
-    p_batch = range(1, 30)
     for sm in sm_batch:
         print("Current substitution matrix: ", sm)
-        for p in p_batch:
-            print("Working on patient ", str(p))
-            parallel_fasta_to_distance_matrix(p, sm, 10, 0.5)
+        parallel_fasta_to_distance_matrix('BLHD', sm, 10, 0.5)
 
 
 if __name__ == '__main__':
-
-    get_num_seq(fr'/home/ubuntu/Enno/gammaDelta/patients/patient_1.fasta')
+    calculate_distance_matrices()

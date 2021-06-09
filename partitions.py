@@ -14,7 +14,7 @@ def patient_get_num_sequences(num: int):
     :param num: Number of desired patient.
     :return: Number of sequences cointained in patient's #num dataset.
     """
-    file = fr'/home/ubuntu/Enno/gammaDelta/patients/patient_{num}.fasta'
+    file = fr'/home/ubuntu/Enno/gammaDelta/healthydonor/patient_{num}.fasta'
     num = len([1 for line in open(file) if line.startswith(">")])
     return num
 

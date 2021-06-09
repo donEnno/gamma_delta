@@ -84,7 +84,7 @@ def numpy_to_nx_graph(dist_mat: np.ndarray):
     return g
 
 
-def calculate_partitions(patient: int, substitution_matrix: str, netx: bool, resolution=1.00, gamma=1.00, save_partition=False,
+def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, resolution=1.00, gamma=1.00, save_partition=False,
                          save_plot=False, show=False):
     """
     Plots the result of the Louvain community detection algorithm in a UMAP. One can either you use a networkx-based
@@ -158,7 +158,4 @@ def calculate_partitions(patient: int, substitution_matrix: str, netx: bool, res
 
 
 if __name__ == '__main__':
-    resis = [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1, 1.01, 1.02, 1.03, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17, 1.18, 1.19, 1.2]
-    for res in resis:
-        for mati in ['BLOSUM45', 'BLOSUM80', 'GONNET1992']:
-            calculate_partitions(0, mati, netx=False, gamma=res, save_plot=True)
+   pass
