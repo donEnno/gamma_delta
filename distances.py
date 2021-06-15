@@ -1,6 +1,6 @@
 # Default
 import time
-
+import joblib
 import numpy as np
 from joblib import Parallel, delayed, dump
 
@@ -8,7 +8,10 @@ from joblib import Parallel, delayed, dump
 import Bio.Seq
 from Bio import SeqIO, pairwise2
 from Bio.Align import substitution_matrices
-from Bio.Align.Applications import ClustalOmegaCommandline
+from Bio.Phylo.TreeConstruction import DistanceTreeConstructor
+from Bio.Phylo.TreeConstruction import DistanceCalculator
+from Bio import AlignIO
+# from Bio.Align.Applications import ClustalOmegaCommandline
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -39,8 +42,8 @@ def parallel_fasta_to_distance_matrix(patient: str, substitution_matrix: str, go
     :param patient: Name of desired patient group: 'BLHD', 'BL', 'HD', 'FU'
     :param substitution_matrix: String (e.g. "BLOSUM45", "GONNET1992")
     """
-
-    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
+    # TODO fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_3.fasta"
 
     n = get_num_seq(file)
 
@@ -50,8 +53,9 @@ def parallel_fasta_to_distance_matrix(patient: str, substitution_matrix: str, go
     Parallel(n_jobs=-1, verbose=50)(delayed(pairwise_score)(patient, substitution_matrix, go, ge, seqA, output)
                                     for seqA in enumerate(SeqIO.parse(file, "fasta")))
 
-    dump(output,
-         fr'/home/ubuntu/Enno/gammaDelta/distance_matrices/{patient}_ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
+    # TODO dump(output, fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/{patient}_ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
+    # dump(output,
+    #      fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/TEST')
 
 
 def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, seqa: Bio.Seq.Seq, output):
@@ -68,7 +72,8 @@ def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, s
 
     matrix = substitution_matrices.load(substitution_matrix)
 
-    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
+    # TODO file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_3.fasta"
 
     for seqb in enumerate(SeqIO.parse(file, "fasta")):
         res_ = pairwise2.align.globalds(seqa[1].seq, seqb[1].seq, matrix, -go, -ge, score_only=True)
@@ -81,11 +86,8 @@ def calculate_distance_matrices():
     and a batch of substitution matrices.
     """
 
-    sm_batch = ["BLOSUM45", "BLOSUM80", "GONNET1992"]
-    for sm in sm_batch:
-        print("Current substitution matrix: ", sm)
-        parallel_fasta_to_distance_matrix('BLHD', sm, 10, 0.5)
+    parallel_fasta_to_distance_matrix("BLHD", "BLOSUM45", 10, 0.5)
 
 
 if __name__ == '__main__':
-    calculate_distance_matrices()
+    parallel_fasta_to_distance_matrix("BLHD", "BLOSUM45", 10, 0.5)

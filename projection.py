@@ -101,13 +101,15 @@ def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, res
     :param show: Toggle for plt.show()
     :returns None
     """
-
+    # TODO Adjust for new file formats.
     if patient == 0:
         pat = f'ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX'
     else:
         pat = fr'PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX'
 
-    patient_distance_matrix = load(rf'/home/ubuntu/Enno/gammaDelta/distance_matrices/{pat}')
+    # TODO '/home/ubuntu/Enno/gammaDelta/distance_matrices/{pat}'
+    patient_distance_matrix = load(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM")
+
     ix, iy = patient_distance_matrix.shape
 
     patient_df = pd.DataFrame(data=patient_distance_matrix, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
@@ -128,14 +130,14 @@ def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, res
         if save_partition:
             subname = f'_resolution={resolution}_'
             dump(partition,
-                        fr'/home/ubuntu/Enno/gammaDelta/partition/nx/patient_{patient}_{substitution_matrix}{subname}communities')
+                        fr'/home/ubuntu/Enno/mnt/volume/partitions/patient_{patient}_{substitution_matrix}{subname}communities')
     else:
         print('gamma: ', gamma)
         partition = networkit.community.detectCommunities(g, algo=networkit.community.PLM(g, refine=True, gamma=gamma))
         if save_partition:
             subname = f'_gamma={gamma}_'
             dump(partition,
-                        fr'/home/ubuntu/Enno/gammaDelta/partition/nk/patient_{patient}_{substitution_matrix}{subname}communities')
+                        fr'/home/ubuntu/Enno/mnt/volume/partitions/patient_{patient}_{substitution_matrix}{subname}communities')
 
     # PLOT LOUVAIN CLUSTERING
     if save_plot:
@@ -158,4 +160,17 @@ def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, res
 
 
 if __name__ == '__main__':
-   pass
+    mat = load(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM")
+
+    ix, iy = patient_distance_matrix.shape
+    patient_df = pd.DataFrame(data=patient_distance_matrix, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
+                             columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
+    print(len(patient_df))
+    g = numpy_to_nk_graph(patient_distance_matrix)
+
+    print(g.numberOfEdges())
+    print(g.numberOfNodes())
+
+    """ print('Let\'s go!')
+        calculate_partitions(0, 'ClustalO', netx=False, gamma=1.06, save_plot=True, show=True)
+    """

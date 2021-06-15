@@ -1,3 +1,4 @@
+import joblib
 import pandas as pd
 import os
 import numpy as np
@@ -86,5 +87,25 @@ def ugly_combine_hd_bl():
 
 
 if __name__ == '__main__':
-    ugly_combine_hd_bl()
+    print('Let\'s go!')
+
+    co_to_np = False
+    if co_to_np:
+        with open(r"/home/ubuntu/Enno/mnt/volume/distance_matrices/CO_BLHD_DM.faa.mat", 'rt') as dm:
+
+            mat = np.zeros((29594, 29594))
+            ix = 0
+            lines = dm.readlines()[1:]
+
+            for row in lines:
+                row = row.split()[1:]
+                mat[ix] = row
+                ix += 1
+                if ix % 1000 == 0:
+                    print(ix)
+
+            print(mat.shape)
+            joblib.dump(mat, "/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM")
+
+
 
