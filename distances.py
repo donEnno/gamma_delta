@@ -42,8 +42,8 @@ def parallel_fasta_to_distance_matrix(patient: str, substitution_matrix: str, go
     :param patient: Name of desired patient group: 'BLHD', 'BL', 'HD', 'FU'
     :param substitution_matrix: String (e.g. "BLOSUM45", "GONNET1992")
     """
-    # TODO fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
-    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_3.fasta"
+    # TODO fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_3.fasta"
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
 
     n = get_num_seq(file)
 
@@ -54,8 +54,8 @@ def parallel_fasta_to_distance_matrix(patient: str, substitution_matrix: str, go
                                     for seqA in enumerate(SeqIO.parse(file, "fasta")))
 
     # TODO dump(output, fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/{patient}_ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
-    # dump(output,
-    #      fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/TEST')
+    dump(output,
+         fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/TEST')
 
 
 def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, seqa: Bio.Seq.Seq, output):
@@ -72,11 +72,14 @@ def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, s
 
     matrix = substitution_matrices.load(substitution_matrix)
 
-    # TODO file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
-    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_3.fasta"
+    # TODO file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_3.fasta"
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
 
+    # TODO gloabds , matrix, -go, -ge, score_only=True
     for seqb in enumerate(SeqIO.parse(file, "fasta")):
-        res_ = pairwise2.align.globalds(seqa[1].seq, seqb[1].seq, matrix, -go, -ge, score_only=True)
+        if seqa[0] % 1000 == 0:
+            print(seqa[0])
+        res_ = pairwise2.align.globalxx(seqa[1].seq, seqb[1].seq, score_only=True)
         output[seqa[0]][seqb[0]] = res_
 
 

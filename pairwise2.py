@@ -679,7 +679,7 @@ def _make_score_matrix_generic(
 
     return score_matrix, trace_matrix, best_score
 
-@profile
+
 def _make_score_matrix_fast(
     sequenceA,
     sequenceB,
@@ -756,10 +756,7 @@ def _make_score_matrix_fast(
             # Calculate the score that would occur by extending the
             # alignment without gaps.
             # fmt: off
-            nogap_score = (
-                score_matrix[row - 1][col - 1]
-                + match_fn(sequenceA[row - 1], sequenceB[col - 1])
-            )
+            nogap_score = (score_matrix[row - 1][col - 1] + match_fn(sequenceA[row - 1], sequenceB[col - 1]))
             # fmt: on
             # Check the score that would occur if there were a gap in
             # sequence A. This could come from opening a new gap or
@@ -1385,7 +1382,7 @@ def profile_fasta_to_distance_matrix(substitution_matrix: str, go: int, ge: floa
             print(i)
         i += 1
         for seqb in enumerate(SeqIO.parse(file, "fasta")):
-            res_ = align.globalds(seqa[1].seq, seqb[1].seq, matrix, -go, -ge, score_only=True)
+            res_ = align.globalxx(seqa[1].seq, seqb[1].seq, score_only=True)
             output[seqa[0]][seqb[0]] = res_
 
     # TODO dump(output, fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/{patient}_ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')

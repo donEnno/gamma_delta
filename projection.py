@@ -1,4 +1,6 @@
 # Default
+import time
+
 from joblib import dump, load, Parallel
 import numexpr
 import numpy as np
@@ -108,7 +110,7 @@ def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, res
         pat = fr'PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX'
 
     # TODO '/home/ubuntu/Enno/gammaDelta/distance_matrices/{pat}'
-    patient_distance_matrix = load(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM")
+    patient_distance_matrix = load(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/TEST")
 
     ix, iy = patient_distance_matrix.shape
 
@@ -122,7 +124,10 @@ def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, res
     if netx:
         g = numpy_to_nx_graph(patient_distance_matrix)
     else:
+        t0 = time.time()
         g = numpy_to_nk_graph(patient_distance_matrix)
+        t1 = time.time()
+        print('This took ', t1-t0)
 
     # DETECT COMMUNITIES
     if netx:
@@ -151,8 +156,10 @@ def calculate_partitions(patient: str, substitution_matrix: str, netx: bool, res
             cmap = cm.get_cmap('prism', max(partition.getVector()) + 1)
             plt.scatter(embedding[:, 0], embedding[:, 1], cmap=cmap, c=list(partition.getVector()), s=5)
             sub = f' gamma {gamma}'
-            plt.title(f'Louvain com. det. in UMAP projection of all patients using {substitution_matrix} with {sub}', fontsize=15)
-            plt.savefig(fr'/home/ubuntu/Enno/gammaDelta/plots/PATIENT_{patient}_{substitution_matrix}_nk_{gamma*1000}.png')
+            # TODO {substitution_matrix}
+            plt.title(f'Louvain com. det. in UMAP projection of all patients using identity with {sub}', fontsize=15)
+            # TODO PATIENT_{patient}_{substitution_matrix}_nk_{gamma*1000}
+            plt.savefig(fr'/home/ubuntu/Enno/gammaDelta/plots/TEST.png')
             plt.clf()
     if show:
         plt.show()

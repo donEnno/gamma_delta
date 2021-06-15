@@ -22,6 +22,7 @@ def profile_fasta_to_distance_matrix(substitution_matrix: str, go: int, ge: floa
     # TODO fr"/home/ubuntu/Enno/gammaDelta/sequence_data/{patient}_fasta/{patient}_ALL_SEQUENCES.fasta"
     file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/HD_fasta/HD_PATIENT_1.fasta"
     matrix = substitution_matrices.load(substitution_matrix)
+    print(matrix)
     n = get_num_seq(file)
 
     output_filename_memmap = '/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'

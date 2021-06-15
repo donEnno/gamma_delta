@@ -11,9 +11,10 @@ from projection import calculate_partitions
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 
-partition = calculate_partitions(0, 'BLOSUM45', netx=False, resolution=1.045)
-
-x = get_frequencies(partition, absolute_toggle=True)
+partition = calculate_partitions(0, 'BLOSUM45', netx=False, resolution=1.045, save_plot=True)
+print('partition check')
+x = get_frequencies(partition)
+print('frequencies check')
 y = []
 
 # LogisticRegressionCV for cross-validation
