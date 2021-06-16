@@ -55,7 +55,7 @@ def parallel_fasta_to_distance_matrix(patient: str, substitution_matrix: str, go
 
     # TODO dump(output, fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/{patient}_ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX_{go}_{ge}')
     dump(output,
-         fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/TEST')
+         fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/BLFUHD_TEST')
 
 
 def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, seqa: Bio.Seq.Seq, output):
@@ -77,10 +77,16 @@ def pairwise_score(patient: int, substitution_matrix: str, go: int, ge: float, s
 
     # TODO gloabds , matrix, -go, -ge, score_only=True
     for seqb in enumerate(SeqIO.parse(file, "fasta")):
-        if seqa[0] % 1000 == 0:
-            print(seqa[0])
-        res_ = pairwise2.align.globalxx(seqa[1].seq, seqb[1].seq, score_only=True)
-        output[seqa[0]][seqb[0]] = res_
+        # for seqb in enumerate(SeqIO.parse(file, "fasta")):
+        #     if seqa[0] % 1000 == 0:
+        #         print(seqa[0])
+        #     res_ = pairwise2.align.globalxx(seqa[1].seq, seqb[1].seq, score_only=True)
+        #     output[seqa[0]][seqb[0]] = res_
+        if seqa[0] > seqb[0]:
+            res_ = pairwise2.align.globalxx(seqa[1].seq, seqb[1].seq, score_only=True)
+            output[seqa[0]][seqb[0]] = res_
+        else:
+            continue
 
 
 def calculate_distance_matrices():
@@ -93,4 +99,4 @@ def calculate_distance_matrices():
 
 
 if __name__ == '__main__':
-    parallel_fasta_to_distance_matrix("BLHD", "BLOSUM45", 10, 0.5)
+    parallel_fasta_to_distance_matrix("BLFUHD", "BLOSUM45", 10, 0.5)

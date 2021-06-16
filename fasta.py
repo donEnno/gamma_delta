@@ -52,10 +52,12 @@ def txt_to_fasta(mode: str, one_file=False):
 def ugly_combine_hd_bl():
 
     path = '/home/ubuntu/Enno/gammaDelta/data/'
-    pre = 'BL_'
 
     list_of_txt_bl = os.listdir(path + 'BL_txt/')
     list_of_txt_bl.sort()
+
+    list_of_txt_fu = os.listdir(path + 'FU_txt/')
+    list_of_txt_fu.sort()
 
     list_of_txt_hd = os.listdir(path + 'HD_txt/')
     list_of_txt_hd.sort()
@@ -66,19 +68,35 @@ def ugly_combine_hd_bl():
         with open(path + 'BL_txt/' + file, 'rt') as fd:
             list_of_dataframe.append(pd.read_csv(fd, sep='\t', header=0))
 
+    for file in list_of_txt_fu:
+        with open(path + 'FU_txt/' + file, 'rt') as fd:
+            list_of_dataframe.append(pd.read_csv(fd, sep='\t', header=0))
+
     for file in list_of_txt_hd:
         with open(path + 'HD_txt/' + file, 'rt') as fd:
             list_of_dataframe.append(pd.read_csv(fd, sep='\t', header=0))
 
     print(len(list_of_dataframe))
 
-    with open('/home/ubuntu/Enno/gammaDelta/sequence_data/' + f'BLHD_fasta' + f'/BLHD_ALL_SEQUENCES.fasta',
+    with open('/home/ubuntu/Enno/gammaDelta/sequence_data/' + f'BLFUHD_fasta' + f'/BLFUHD_ALL_SEQUENCES.fasta',
               'w') as wf:
+
         i = 1
+        round2 = False
+
+        pre = 'BL_'
+        fu = 'FU_'
+        hd = 'HD_'
+
         for patient in list_of_dataframe:
             if i == 67:
                 i = 1
-                pre = 'HD_'
+                pre = fu
+                round2 = True
+            if round2:
+                if i == 56:
+                    i = 1
+                    pre = hd
             j = 1
             for sequence in patient['cdr3aa']:
                 wf.writelines('>' + pre + 'PATIENT_' + str(i) + '_SEQUENCE_' + str(j) + '\n' + sequence + '\n')
@@ -87,8 +105,7 @@ def ugly_combine_hd_bl():
 
 
 if __name__ == '__main__':
-    print('Let\'s go!')
-
+    ugly_combine_hd_bl()
     co_to_np = False
     if co_to_np:
         with open(r"/home/ubuntu/Enno/mnt/volume/distance_matrices/CO_BLHD_DM.faa.mat", 'rt') as dm:

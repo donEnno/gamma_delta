@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from projection import calculate_partitions
 
@@ -7,16 +9,6 @@ from projection import calculate_partitions
 # parti_on = plot_louvain(0, 'BLOSUM45', netx=False, gamma=1.045)
 # print(parti_on)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-
-def patient_get_num_sequences(num: int):
-    """
-    :param num: Number of desired patient.
-    :return: Number of sequences cointained in patient's #num dataset.
-    """
-    file = fr'/home/ubuntu/Enno/gammaDelta/healthydonor/patient_{num}.fasta'
-    num = len([1 for line in open(file) if line.startswith(">")])
-    return num
 
 
 def count_frequency(patient_list: list, num: int):
@@ -36,26 +28,53 @@ def count_frequency(patient_list: list, num: int):
     return frequency
 
 
-def get_frequencies(partition, absolute_toggle=False):
+def patient_get_num_sequences(patient_type: str):
+    """
+    :param patient_type:
+    :return: Number of sequences contained in patient's #num dataset.
+    """
+    num = []
+    path = fr'/home/ubuntu/Enno/gammaDelta/sequence_data/{patient_type}_fasta/'
+    num_patients = len(os.listdir(path))
+
+    print('From patient_get_num_sequences: \n'
+          f'Number of patients for {patient_type} is ', num_patients)
+
+    for i in range(1, num_patients+1):
+        file = fr'{path}{patient_type}_PATIENT_{i}.fasta'
+        num.append(len([1 for line in open(file) if line.startswith(">")]))
+
+    print('From patient_get_num_sequences: \n'
+          f'List of number of seq per patients for {patient_type} is ', num)
+
+    return num
+
+
+def get_frequencies(partition, patient_types, absolute_toggle=False):
     """
     Returns a np.array of shape (num_patients, num_communities) with community frequencies.
-    :param partition: Result of nx-based Louvain algorithm.
+    :param partition: Result of NetworKit-based Louvain algorithm.
+    :param patient_types:
     :param absolute_toggle: Set True to return absolute frequencies.
     """
     absolute = []
     relative = []
+    num_seq_per_patient = []
 
-    num_patients = 29
-    num_seq_per_patient = [patient_get_num_sequences(i) for i in range(1, num_patients+1)]
+    # num_seq_per_patient.extend(patient_get_num_sequences(typ) for typ in patient_types)
+    for typ in patient_types:
+        num_seq_per_patient.extend(patient_get_num_sequences(typ))
+
+    print('From get_frequencies: \n'
+          'Total num_seq_per_patient: ', num_seq_per_patient)
+
     total_num_seq = sum(num_seq_per_patient)
+    print('From get_frequencies: \n'
+          'total_num_seq: ', total_num_seq)
 
-    if type(partition) == dict:
-        num_partitions = max(partition.values())+1
-        partition = list(partition.items())
-    else:
-        partition = partition.getVector()
-        num_partitions = len(np.unique(partition))
-        partition = list(zip(range(total_num_seq), partition))
+    partition = partition.getVector()
+    num_partitions = len(np.unique(partition))
+    partition = list(zip(range(total_num_seq), partition))
 
     upper = 0
     for i in num_seq_per_patient:
@@ -91,7 +110,7 @@ def get_cluster_membership(patient_list: list, num: int):
 def compute_overlap(partition_1):
     """
     Returns a np.array of shape (num_patients, num_communities) with community frequencies.
-    :param partition_1: Result of nx-based Louvain algorithm.
+    :param partition_1: Result of nk-based Louvain algorithm.
     :param absolute_toggle: Set True to return absolute frequencies.
     """
     absolute = []
@@ -112,6 +131,3 @@ def compute_overlap(partition_1):
 
     return np.array(temp)
 
-
-b45_partition = calculate_partitions(0, 'BLOSUM45', netx=False, gamma=1.06)
-print(compute_overlap(b45_partition))
