@@ -1,7 +1,5 @@
 # Default
 from matplotlib import pyplot
-import numpy as np
-from joblib import load
 
 # Pipeline
 from partitions import get_frequencies
@@ -35,9 +33,9 @@ model.fit(trainX, trainY)
 
 # Model score
 print('Model score for testX/Y:')
-model.score(testX, testY)
+print(model.score(testX, testY))
 print('Model score for x/y:')
-model.score(x, y)
+print(model.score(x, y))
 
 # Predict probabilities
 lr_probs = model.predict_proba(testX)

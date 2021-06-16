@@ -37,15 +37,15 @@ def patient_get_num_sequences(patient_type: str):
     path = fr'/home/ubuntu/Enno/gammaDelta/sequence_data/{patient_type}_fasta/'
     num_patients = len(os.listdir(path))
 
-    print('From patient_get_num_sequences: \n'
-          f'Number of patients for {patient_type} is ', num_patients)
+    # print('From patient_get_num_sequences: \n'
+    #       f'Number of patients for {patient_type} is ', num_patients)
 
     for i in range(1, num_patients+1):
         file = fr'{path}{patient_type}_PATIENT_{i}.fasta'
         num.append(len([1 for line in open(file) if line.startswith(">")]))
 
-    print('From patient_get_num_sequences: \n'
-          f'List of number of seq per patients for {patient_type} is ', num)
+    # print('From patient_get_num_sequences: \n'
+    #       f'List of number of seq per patients for {patient_type} is ', num)
 
     return num
 
@@ -65,12 +65,12 @@ def get_frequencies(partition, patient_types, absolute_toggle=False):
     for typ in patient_types:
         num_seq_per_patient.extend(patient_get_num_sequences(typ))
 
-    print('From get_frequencies: \n'
-          'Total num_seq_per_patient: ', num_seq_per_patient)
+    # print('From get_frequencies: \n'
+    #       'Total num_seq_per_patient: ', num_seq_per_patient)
 
     total_num_seq = sum(num_seq_per_patient)
-    print('From get_frequencies: \n'
-          'total_num_seq: ', total_num_seq)
+    # print('From get_frequencies: \n'
+    #      'total_num_seq: ', total_num_seq)
 
     partition = partition.getVector()
     num_partitions = len(np.unique(partition))
