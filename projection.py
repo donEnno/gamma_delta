@@ -25,8 +25,14 @@ import matplotlib.pyplot as plt
 numexpr.MAX_THREADS = 14
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-#                            RESOLUTION = 0.875                          GAMMA = 1.05                                 #
+#                           GAMMA = ~1.06 for NK approach
+#                                 = ~
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+
+def load_dm(path):
+    dm = load(path)
+    return dm
 
 
 def get_umap(df: pd.DataFrame):
@@ -56,14 +62,16 @@ def numpy_to_nk_graph(dist_mat: np.ndarray):
 
     mask_x, mask_y = np.mask_indices(m, np.tril, -1)
     masking_zip = zip(mask_x, mask_y, dist_mat[mask_x, mask_y])
-
+    i = 0
     for nodeA, nodeB, weight in masking_zip:
+        i += 1
+        if i % 10 ** 8 == 0: print(i)
         g.addEdge(nodeA, nodeB, weight)
-
+    print(i)
     return g
 
 
-def calculate_partitions(patient: str, substitution_matrix: str, gamma=1.00, save_partition=False, save_plot=False,
+def calculate_partitions(patient: str, substitution_matrix: str, distance_matrix, graph, gamma=1.00, save_partition=False, save_plot=False,
                          show=False):
     """
     Plots the result of the Louvain community detection algorithm in a UMAP. One can either you use a networkx-based
@@ -78,64 +86,55 @@ def calculate_partitions(patient: str, substitution_matrix: str, gamma=1.00, sav
     :param show: Toggle for plt.show()
     :returns None
     """
-    # TODO Adjust for new file formats.
-    if patient == 0:
-        pat = f'ALL_SEQUENCES_{substitution_matrix}_DISTANCE_MATRIX'
-    else:
-        pat = fr'PATIENT_{patient}_{substitution_matrix}_DISTANCE_MATRIX'
-
-    # TODO '/home/ubuntu/Enno/gammaDelta/distance_matrices/{pat}'
-    patient_distance_matrix = load(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/TEST")
-
-    ix, iy = patient_distance_matrix.shape
-
-    patient_df = pd.DataFrame(data=patient_distance_matrix, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
-                              columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
 
     # CREATE UMAP
+    ix, iy = distance_matrix.shape
+    patient_df = pd.DataFrame(data=distance_matrix, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
+                              columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
     embedding = get_umap(patient_df)
-
-    # CREATE GRAPH
-    start_time = time.time()
-    g = numpy_to_nk_graph(patient_distance_matrix)
-    end_time = time.time()
-    print('Creating the networKit graph took', round(end_time-start_time, 2))
 
     # DETECT COMMUNITIES
     print('Detecting communities using gamma = ', gamma)
-    partition = networkit.community.detectCommunities(g, algo=networkit.community.PLM(g, refine=True, gamma=gamma))
+    partition = networkit.community.detectCommunities(graph, algo=networkit.community.PLM(graph, refine=True, gamma=gamma))
+    vector = partition.getVector()
+    num_partitions = len(np.unique(vector))
+
     if save_partition:
-        subname = f'_gamma={gamma}_'
-        dump(partition,
-                    fr'/home/ubuntu/Enno/mnt/volume/partitions/patient_{patient}_{substitution_matrix}{subname}communities')
+        dump(vector,
+                    fr'/home/ubuntu/Enno/mnt/volume/vectors/c_{substitution_matrix}_{gamma}_communities')
 
     # PLOT LOUVAIN CLUSTERING
     if save_plot:
         cmap = cm.get_cmap('prism', max(partition.getVector()) + 1)
-        plt.scatter(embedding[:, 0], embedding[:, 1], cmap=cmap, c=list(partition.getVector()), s=5, alpha=0.5)
-        sub = f' gamma {gamma}'
-        # TODO {substitution_matrix}
-        plt.title(f'Louvain com. det. in UMAP projection of all patients using identity with {sub}', fontsize=15)
-        # TODO PATIENT_{patient}_{substitution_matrix}_nk_{gamma*1000}
-        plt.savefig(fr'/home/ubuntu/Enno/gammaDelta/plots/TEST.png')
-        plt.clf()
+        plt.scatter(embedding[:, 0], embedding[:, 1], cmap=cmap, c=list(vector), s=5, alpha=0.25)
+        plt.title(f'Louvain com. det. in UMAP projection of all BLHD patients with {gamma} gamma \n'
+                  f'Identity, {num_partitions} communites found', fontsize=15)
+        plt.savefig(fr'/home/ubuntu/Enno/mnt/volume/plots/blhd_{substitution_matrix}_{gamma}g_cluster.png')
+        if not show:
+            plt.clf()
     if show:
         plt.show()
+        plt.clf()
     return partition
 
 
 if __name__ == '__main__':
-    mat = load(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM")
+    print('Let\'s go!')
 
-    ix, iy = patient_distance_matrix.shape
-    patient_df = pd.DataFrame(data=patient_distance_matrix, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
-                             columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
-    print(len(patient_df))
-    g = numpy_to_nk_graph(patient_distance_matrix)
+    start_time = time.time()
+    dm = load_dm(rf"/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM")
+    end_time = time.time()
+    print('Loading the DM took', round(end_time - start_time, 2), '[s]')
 
-    print(g.numberOfEdges())
-    print(g.numberOfNodes())
+    start_time = time.time()
+    g = numpy_to_nk_graph(dm)
+    end_time = time.time()
+    print('Creating the networKit graph took', round(end_time - start_time, 2), '[s]')
 
-    """ print('Let\'s go!')
-        calculate_partitions(0, 'ClustalO', netx=False, gamma=1.06, save_plot=True, show=True)
-    """
+    calculate_partitions(0, 'CO', dm, g, gamma=1.01, save_partition=True)
+    calculate_partitions(0, 'CO', dm, g, gamma=1.02, save_partition=True)
+    calculate_partitions(0, 'CO', dm, g, gamma=1.03, save_partition=True)
+    calculate_partitions(0, 'CO', dm, g, gamma=1.04, save_partition=True)
+    calculate_partitions(0, 'CO', dm, g, gamma=1.06, save_partition=True)
+
+

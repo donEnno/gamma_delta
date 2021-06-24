@@ -72,8 +72,13 @@ def get_frequencies(partition, patient_types, absolute_toggle=False):
     # print('From get_frequencies: \n'
     #      'total_num_seq: ', total_num_seq)
 
-    partition = partition.getVector()
+    # partition = partition.getVector()
     num_partitions = len(np.unique(partition))
+
+    if max(partition) != num_partitions:
+        dic = dict(zip(np.unique(partition), range(num_partitions)))
+        partition = [dic[i] for i in partition]
+
     partition = list(zip(range(total_num_seq), partition))
 
     upper = 0
