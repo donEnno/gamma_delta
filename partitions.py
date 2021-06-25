@@ -1,84 +1,93 @@
 import os
-
 import numpy as np
-from projection import calculate_partitions
-
-# # # # # # # # # # # # # # # # RESULT OF NX BASED METHOD # # # # # # # # # # # # # # # # # # #
-# parti_on = load('/home/ubuntu/Enno/gammaDelta/partition/all_patients_BLOSUM45_communities')
-# parti_on = load("/home/ubuntu/Enno/gammaDelta/partition/nx/patient_10_BLOSUM45_resolution=0.875_communities")
-# parti_on = plot_louvain(0, 'BLOSUM45', netx=False, gamma=1.045)
-# print(parti_on)
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+from Bio.SeqIO.FastaIO import FastaIterator
 
 
-def count_frequency(patient_list: list, num: int):
+def count_frequency_for_one_patient(patient_list: list, aa_sequences: list, actual, num: int):
     """
     :param patient_list: List of tuples (s, c), where s is #sequence and c is its assigned community.
+    :param aa_sequences: List of all SeqIO objects.
     :param num: Total number of communities.
     :return: List of absolute frequencies for one patient.
     """
     frequency = np.zeros(num)
 
-    for s, c in patient_list:
+    for aa, (s, c) in zip(aa_sequences, patient_list):
         if frequency[c] == 0:
             frequency[c] = 1
         else:
             frequency[c] += 1
+        actual[c].append(aa)
 
-    return frequency
+    return frequency, actual
 
 
 def patient_get_num_sequences(patient_type: str):
     """
-    :param patient_type:
+    :param patient_type: Either 'BL', 'FU', 'HD' or a combination of those, eg 'BLHD'
     :return: Number of sequences contained in patient's #num dataset.
     """
     num = []
     path = fr'/home/ubuntu/Enno/gammaDelta/sequence_data/{patient_type}_fasta/'
+
     num_patients = len(os.listdir(path))
+    num_patients = range(1, num_patients+1)
 
-    # print('From patient_get_num_sequences: \n'
-    #       f'Number of patients for {patient_type} is ', num_patients)
-
-    for i in range(1, num_patients+1):
-        file = fr'{path}{patient_type}_PATIENT_{i}.fasta'
+    for patient_num in num_patients:
+        file = fr'{path}{patient_type}_PATIENT_{patient_num}.fasta'
         num.append(len([1 for line in open(file) if line.startswith(">")]))
-
-    # print('From patient_get_num_sequences: \n'
-    #       f'List of number of seq per patients for {patient_type} is ', num)
 
     return num
 
 
-def get_frequencies(partition, patient_types, absolute_toggle=False):
+def fasta_to_seqio_list():
+    """
+    :return: List of SeqIO objects.
+    """
+
+    # TODO Make generic
+    file = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/BLHD_fasta/BLHD_ALL_SEQUENCES.fasta"
+
+    aa_sequences = []
+    with open(file) as handle:
+        c = 0
+        for record in FastaIterator(handle):
+            aa_sequences.append(record)
+
+    return aa_sequences
+
+
+def get_frequencies(partition, patient_types, absolute_toggle=True):
     """
     Returns a np.array of shape (num_patients, num_communities) with community frequencies.
     :param partition: Result of NetworKit-based Louvain algorithm.
-    :param patient_types:
-    :param absolute_toggle: Set True to return absolute frequencies.
+    :param patient_types: Either 'BL', 'FU', 'HD' or a combination of those, eg 'BLHD'
+    :param absolute_toggle: Set False to return relative frequencies.
+
+    :return Either absolute or relative cluster frequency and the clustered sequences.
     """
+
     absolute = []
     relative = []
     num_seq_per_patient = []
 
-    # num_seq_per_patient.extend(patient_get_num_sequences(typ) for typ in patient_types)
+    list_of_sequences = fasta_to_seqio_list()
+
     for typ in patient_types:
         num_seq_per_patient.extend(patient_get_num_sequences(typ))
 
-    # print('From get_frequencies: \n'
-    #       'Total num_seq_per_patient: ', num_seq_per_patient)
-
     total_num_seq = sum(num_seq_per_patient)
-    # print('From get_frequencies: \n'
-    #      'total_num_seq: ', total_num_seq)
-
-    # partition = partition.getVector()
     num_partitions = len(np.unique(partition))
 
+    # Initialize containers for SeqIO objects.
+    actual = [[] for i in range(num_partitions)]
+
+    # Sometimes partition is bugged and not every value is assigned. Therefore one needs to map them properly.
     if max(partition) != num_partitions:
         dic = dict(zip(np.unique(partition), range(num_partitions)))
         partition = [dic[i] for i in partition]
 
+    # Create tuples (s, c) where s is the sequence' index and c its assigned cluster.
     partition = list(zip(range(total_num_seq), partition))
 
     upper = 0
@@ -86,53 +95,15 @@ def get_frequencies(partition, patient_types, absolute_toggle=False):
         lower = upper
         upper += i
 
-        temp = count_frequency(partition[lower:upper], num_partitions)
-        temp_sum = sum(temp)
+        # Split partition and list_of_sequences in [lower:upper] where [l:u] is the range of sequences for one patient.
+        temp_freq, actual = count_frequency_for_one_patient(partition[lower:upper], list_of_sequences[lower:upper], actual, num_partitions)
+        temp_sum = sum(temp_freq)
 
-        absolute.append(temp)
-        relative.append(temp/temp_sum)
+        absolute.append(temp_freq)
+        relative.append(temp_freq/temp_sum)
 
     if absolute_toggle:
-        return np.array(absolute)
+        return np.array(absolute), actual
 
-    return np.array(relative)
-
-
-def get_cluster_membership(patient_list: list, num: int):
-    """
-    :param patient_list: List of tuples (s, c), where s is #sequence and c is its assigned community.
-    :param num: Total number of communities.
-    :return: List of absolute frequencies for one patient.
-    """
-    frequency = [[] for i in range(num)]
-
-    for s, c in patient_list:
-        frequency[c].append(s)
-
-    return np.array(frequency)
-
-
-def compute_overlap(partition_1):
-    """
-    Returns a np.array of shape (num_patients, num_communities) with community frequencies.
-    :param partition_1: Result of nk-based Louvain algorithm.
-    :param absolute_toggle: Set True to return absolute frequencies.
-    """
-    absolute = []
-    relative = []
-
-    num_patients = 29
-    total_num_seq = 10711
-
-    partition_1 = partition_1.getVector()
-    num_partitions = len(np.unique(partition_1))
-    partition_1 = list(zip(range(total_num_seq), partition_1))
-
-    # partition_2 = partition_2.getVector()
-    # num_partitions = len(np.unique(partition_2))
-    # partition_2 = list(zip(range(total_num_seq), partition_2))
-
-    temp = get_cluster_membership(partition_1, num_partitions)
-
-    return np.array(temp)
+    return np.array(relative), actual
 

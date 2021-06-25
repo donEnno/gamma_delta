@@ -1,24 +1,24 @@
 # Default
 import joblib
-from matplotlib import pyplot
+from matplotlib import pyplot, pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
+import pandas as pd
 
 # Pipeline
 from partitions import get_frequencies
-from projection import calculate_partitions
+from projection import get_umap, load_dm
 
 # ML
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+from sklearn.linear_model import LogisticRegression     # , LogisticRegressionCV
 from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
+from sklearn.model_selection import train_test_split    # , StratifiedShuffleSplit
 from sklearn.metrics import roc_curve
 from sklearn.metrics import roc_auc_score
 
-
 # Generate feature
 partition = joblib.load(fr"/home/ubuntu/Enno/mnt/volume/vectors/c_CO_1.02_communities")
-x = get_frequencies(partition, ['BL', 'HD'], absolute_toggle=True)
-print(len(np.unique(partition)))
+x, aa_cluster = get_frequencies(partition, ['BL', 'HD'], absolute_toggle=True)
 
 # Set response
 bl = [1 for i in range(66)]
@@ -31,6 +31,14 @@ y.extend(hd)
 
 
 def eval_model(model, testX, testY, c, roc=False):
+    """
+    :param model: Model to be evaluated.
+    :param testX: Test features.
+    :param testY: Test responses.
+    :param c: Regularization parameter. For low values a stronger regularization is implied.
+    :param roc: Set True if ROC-Curve should be plotted.
+    """
+
     # Model score
     print(11*'= ', ' MODEL SCORES ', 11*' =', '\n')
 
@@ -51,8 +59,6 @@ def eval_model(model, testX, testY, c, roc=False):
     c_report = classification_report(testY, model.predict(testX))
     print(c_report)
 
-    print(sorted(model.coef_[0]))
-
     if roc:
         # Calculate roc curves
         lr_fpr, lr_tpr, _ = roc_curve(testY, lr_probs)
@@ -63,75 +69,102 @@ def eval_model(model, testX, testY, c, roc=False):
         pyplot.xlabel('False Positive Rate')
         pyplot.ylabel('True Positive Rate')
         pyplot.legend()
-        # pyplot.savefig('/home/ubuntu/Enno/gammaDelta/plots/test_1.png')
         pyplot.show()
         pyplot.clf()
 
-    cm = confusion_matrix(testY, model.predict(testX))
-
-    print('\t', '0', '\t', '1')
+    # Print confusion matrix to Run.
+    co_ma = confusion_matrix(testY, model.predict(testX))
+    print(r'A\P', '\t', '0', '\t', '1')
     print(12*'=')
+
     for i in range(2):
-        print(i, ' \t', cm[i, 0], '\t', cm[i, 1])
+        print(i, ' \t', co_ma[i, 0], '\t', co_ma[i, 1])
         print(12 * '=')
+
+    # Coef
+    coef = model.coef_[0]
+    # Zip one clusters coefficient, its SeqIO objects and its index.
+    coef_cluster = zip(coef, aa_cluster, range(len(coef)))
+    coef_cluster = list(coef_cluster)
+
+    # TODO Get it right.
+    res = sorted(coef_cluster, key=lambda cf: cf[0])
+    print(res[0])
+    print(res[-1])
+
+    # highest_coef_cluster = []
+    with open('/home/ubuntu/Enno/gammaDelta/sequence_data/BLHD_LOWEST_COEF.fasta', 'w') as wf:
+        for ele in res[-1][1]:
+            content = '>' + ele.id + '\n' + ele.seq + '\n'
+            wf.writelines(content)
+
+
+def adjust_partition(partition):
+    """
+    Sometimes the enumeration is messed up and this function maps them again properly.
+    """
+    num_partitions = len(np.unique(partition))
+    if max(partition) != num_partitions:
+        dic = dict(zip(np.unique(partition), range(num_partitions)))
+        partition = [dic[i] for i in partition]
+
+        return partition
+
+
+def prepare_plot_data(cluster_of_interest):
+    z = []
+
+    for cluster in partition:
+        if cluster == cluster_of_interest:
+            z.append(1)
+        else:
+            z.append(0)
+    z = np.array(z)
+    return z
+
+def highlight_cluster_in_umap(distance_matrix, cluster_of_interest):
+    """
+    Highlights the cluster of interest in the UMAP projection.
+
+    :param distance_matrix: Distance matrix to be used.
+    """
+
+    # TODO Make generic.
+    partition = joblib.load(fr"/home/ubuntu/Enno/mnt/volume/vectors/c_CO_1.02_communities")
+    adjust_partition(partition)
+    print(partition)
+
+    # CREATE UMAP
+    ix, iy = distance_matrix.shape
+    patient_df = pd.DataFrame(data=distance_matrix, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
+                              columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
+    # Data to be plotted
+    # TODO Take close look at embedding.
+    embedding = get_umap(patient_df)
+    vector = prepare_plot_data(cluster_of_interest)
+
+    cmap = mcolors.ListedColormap(["grey", "red"])
+    plt.scatter(embedding[:, 0], embedding[:, 1], c=vector, cmap=cmap, s=5, alpha=0.25)
+    plt.title(f'Found clusters', fontsize=15)
+    plt.show()
+    plt.clf()
 
 
 if __name__ == '__main__':
-    for c in [0.01]:
-        print(10 * '= ', 'RUNNING ON C =', c, 10 * ' =')
 
-        # Split into train/test sets
-        trainX, testX, trainY, testY = train_test_split(x, y, test_size=0.2, stratify=y, random_state=2)
+    do_modeling = False
+    if do_modeling:
+        for c in [0.01]:
+            print(10 * '= ', 'RUNNING ON C =', c, 10 * ' =')
 
-        # Fit model
-        model = LogisticRegression(solver='lbfgs', n_jobs=-1, C=c, random_state=3, max_iter=5000)
-        model.fit(trainX, trainY)
+            # Split into train/test sets
+            trainX, testX, trainY, testY = train_test_split(x, y, test_size=0.2, stratify=y, random_state=2)
 
-        eval_model(model, testX, testY, c)
+            # Fit model
+            model = LogisticRegression(solver='lbfgs', n_jobs=-1, C=c, random_state=3, max_iter=5000)
+            model.fit(trainX, trainY)
 
+            eval_model(model, testX, testY, c)
 
-
-
-"""model_score = model.score(x, y)
-print(model_score)
-
-cm = confusion_matrix(y, model.predict(x))
-fig, ax = pyplot.subplots(figsize=(8, 8))
-ax.imshow(cm)
-ax.grid(False)
-ax.xaxis.set(ticks=(0, 1), ticklabels=('Predicted 0s', 'Predicted 1s'))
-ax.yaxis.set(ticks=(0, 1), ticklabels=('Actual 0s', 'Actual 1s'))
-ax.set_ylim(1.5, -0.5)
-for i in range(2):
-    for j in range(2):
-        ax.text(j, i, cm[i, j], ha='center', va='center', color='red')
-plt.show()
-
-c_report = classification_report(y, model.predict(x))
-print(c_report)
-"""
-"""
-model.classes_
-model.intercept_
-model.coef_
-model.predict_proba(x)
-model.predict(x)
-model.score(x, y)
-
-confusion_matrix(y, model.predict(x))
-
-cm = confusion_matrix(y, model.predict(x))
-fig, ax = plt.subplots(figsize=(8, 8))
-ax.imshow(cm)
-ax.grid(False)
-ax.xaxis.set(ticks=(0, 1), ticklabels=('Predicted 0s', 'Predicted 1s'))
-ax.yaxis.set(ticks=(0, 1), ticklabels=('Actual 0s', 'Actual 1s'))
-ax.set_ylim(1.5, -0.5)
-for i in range(2):
-    for j in range(2):
-        ax.text(j, i, cm[i, j], ha='center', va='center', color='red')
-plt.show()
-
-classification_report(y, model.predict(x), output_dict=True)
-...
-"""
+    dm = load_dm('/home/ubuntu/Enno/mnt/volume/distance_matrices/NP_BLHD_DM')
+    highlight_cluster_in_umap(dm, 20)
