@@ -62,6 +62,23 @@ def numpy_to_nk_graph(dist_mat: np.ndarray):
 
     mask_x, mask_y = np.mask_indices(m, np.tril, -1)
     masking_zip = zip(mask_x, mask_y, dist_mat[mask_x, mask_y])
+
+    # For sequence tracking purposes
+    print('A')
+    #l_invest = list(masking_zip)
+    #print('B')
+    #print(len(l_invest))
+    textfile = open('masking_zip.txt', 'w')
+    print('C')
+    counter = 0
+    for nodeA, nodeB, weight in masking_zip:                                                        # To investigate
+        counter += 1
+        if counter % 100000 == 0: print(counter)
+        content = str(nodeA), ' ', str(nodeB), ' ', str(weight)
+        textfile.write(''.join(content) + '\n')
+    textfile.close()
+    # end
+
     i = 0
     for nodeA, nodeB, weight in masking_zip:
         i += 1
@@ -100,8 +117,7 @@ def calculate_partitions(patient: str, substitution_matrix: str, distance_matrix
     num_partitions = len(np.unique(vector))
 
     if save_partition:
-        dump(vector,
-                    fr'/home/ubuntu/Enno/mnt/volume/vectors/c_{substitution_matrix}_{gamma}_communities')
+        dump(vector, fr'/home/ubuntu/Enno/mnt/volume/vectors/c_{substitution_matrix}_{gamma}_communities')
 
     # PLOT LOUVAIN CLUSTERING
     if save_plot:
@@ -132,9 +148,4 @@ if __name__ == '__main__':
     print('Creating the networKit graph took', round(end_time - start_time, 2), '[s]')
 
     calculate_partitions(0, 'CO', dm, g, gamma=1.01, save_partition=True)
-    calculate_partitions(0, 'CO', dm, g, gamma=1.02, save_partition=True)
-    calculate_partitions(0, 'CO', dm, g, gamma=1.03, save_partition=True)
-    calculate_partitions(0, 'CO', dm, g, gamma=1.04, save_partition=True)
-    calculate_partitions(0, 'CO', dm, g, gamma=1.06, save_partition=True)
-
 
