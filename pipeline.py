@@ -26,10 +26,75 @@ import matplotlib.colors as mcolors
 
 # ML
 from sklearn.linear_model import LogisticRegression     # , LogisticRegressionCV
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix,  accuracy_score
 from sklearn.model_selection import train_test_split    # , StratifiedShuffleSplit
-from sklearn.metrics import roc_curve
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_curve, roc_auc_score, balanced_accuracy_score
+
+import statsmodels.api as sm
+from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.utils.multiclass import check_classification_targets
+from sklearn.utils.validation import check_X_y, check_is_fitted, check_array
+from sklearn.utils.multiclass import unique_labels
+from sklearn.utils.estimator_checks import check_estimator
+from sklearn.model_selection import cross_val_score
+
+
+class SMWrapper(BaseEstimator, RegressorMixin):
+    def __init__(self, fit_intercept=True):
+
+        self.fit_intercept = fit_intercept
+
+    """
+    Parameters
+    ------------
+    column_names: list
+            It is an optional value, such that this class knows 
+            what is the name of the feature to associate to 
+            each column of X. This is useful if you use the method
+            summary(), so that it can show the feature name for each
+            coefficient
+    """
+
+    def fit(self, X, y, column_names=()):
+
+        if self.fit_intercept:
+            X = sm.add_constant(X)
+
+        # Check that X and y have correct shape
+        X, y = check_X_y(X, y)
+
+        self.X_ = X
+        self.y_ = y
+
+        if len(column_names) != 0:
+            cols = column_names.copy()
+            cols = list(cols)
+            X = pd.DataFrame(X)
+            cols = column_names.copy()
+            cols.insert(0, 'intercept')
+            print('X ', X)
+            X.columns = cols
+
+        self.model_ = sm.Logit(y, X)
+        self.results_ = self.model_.fit()
+        return self
+
+    def predict(self, X):
+        # Check is fit had been called
+        check_is_fitted(self, 'model_')
+
+        # Input validation
+        X = check_array(X)
+
+        if self.fit_intercept:
+            X = sm.add_constant(X)
+        return self.results_.predict(X)
+
+    def get_params(self, deep=False):
+        return {'fit_intercept': self.fit_intercept}
+
+    def summary(self):
+        print(self.results_.summary())
 
 
 class Data:
@@ -77,6 +142,7 @@ class Data:
         self.sequences_per_cluster = []
 
         # Classification
+        self.final_feature = np.array([[] for _ in range(95)])
         self.response = []
         self.model = LogisticRegression()
         self.test_x = []
@@ -173,33 +239,6 @@ class Data:
         Parallel(n_jobs=-1, verbose=50)(delayed(self.compute_pairwise_scores)(identity, batch, output) for batch in batches)
         dump(output, self.dm_location)
 
-    def convert_newick_to_distance_matrix(self):
-        # sys.setrecursionlimit(10000)          -- >        needed?
-
-        file = '/home/ubuntu/Enno/gammaDelta/sequence_data/BLHD_fasta/1_BLHD_TREE2.phy'
-        tree = Phylo.read(file, 'newick')
-
-        seq_names = tree.get_terminals()
-        dmat = {}
-
-        # length = sum(1 for _ in combinations(seq_names, 2))
-        # print(length)       -->     437887621
-
-        counter = 0
-        timer = time.time()
-
-        for p1, p2 in combinations(seq_names, 2):
-            counter += 1
-            if counter % 10 ** 2 == 0:
-                print(counter)
-                lap = time.time()
-                timing = lap - timer
-                print('This took %.f2 [s]' % timing)
-                break
-
-            d = tree.distance(p1, p2)
-            dmat[(p1.name, p2.name)] = d
-
     def set_dm(self):
 
         if os.path.isfile(self.dm_location):
@@ -233,8 +272,9 @@ class Data:
 
         sns.set(style='white', context='notebook', rc={'figure.figsize': (14, 10)})
 
-        reducer = umap.UMAP()
+        reducer = umap.UMAP(spread=spread, min_dist=min_dist, a=a, b=b)
         self.embedding = reducer.fit_transform(self.dataframe)  # type(embedding) = <class 'numpy.ndarray'
+
 
     def set_graph(self):
 
@@ -283,7 +323,8 @@ class Data:
         x = self.embedding[:, 0]
         y = self.embedding[:, 1]
         plt.scatter(x, y, cmap=cmap, c=list(self.cluster_vector), s=5, alpha=0.5)
-        plt.title(f'Louvain com. det. in UMAP projection, patient type: ' + self.origin + ' using gamma ' + str(self.gamma), fontsize=15)
+        plt.title(f'Louvain com. det. in UMAP projection, patient type: ' + self.origin + ' using gamma ' + str(self.gamma) +
+                  '\n' + str(self.number_of_clusters) + 'cluster found', fontsize=15)
         plt.xlabel('UMAP 1')
         plt.ylabel('UMAP 2')
         plt.show()
@@ -363,7 +404,23 @@ class Data:
         else:
             # return np.array(relative), sequences_per_cluster
             self.feature_vector = np.array(relative)
-        self.sequences_per_cluster = sequences_per_cluster
+        self.sequences_per_cluster.append(sequences_per_cluster)
+
+    def concatenate_features(self, gammas):
+        con_feature = []
+
+        for gamma in gammas:
+            self.gamma = gamma
+            self.calculate_communities()
+            self.calculate_feature_vector()
+
+            print(self.feature_vector.shape)
+            print(self.feature_vector)
+
+            con_feature.append(self.feature_vector)
+
+        new_feature = np.concatenate(con_feature, axis=1)
+        self.feature_vector = new_feature
 
     def set_response(self):
 
@@ -488,18 +545,82 @@ class Data:
 
     def sm_feature_plot(self):
 
-    def highlight_clusters(self):
-
-        cmap = mcolors.ListedColormap(["grey", "green", "red"])
-        plt.scatter(self.embedding[:, 0], self.embedding[:, 1], c=self.z, cmap=cmap, s=5, alpha=0.25)
-        plt.title('Clusters of interest', fontsize=15)
-        plt.xlabel('UMAP 1')
-        plt.ylabel('UMAP 2')
+        proba = 1 / (1 + np.exp(-self.result.fittedvalues))
+        inc = 0.1
+        _ = plt.hist(proba, bins=[i*inc for i in range(11)])
+        plt.title('Hist with 10 bins')
         plt.show()
 
-    # Todo - Clusteroverlap
-    # Todo - Concatenate Featurevectors
-    # Todo - Downstream Analysis
+    def performance_sampling(self):
+
+        model = self.result
+        significant_cluster = len([1 for pvalue in model.pvalues if pvalue < 0.05])
+
+        content = [self.gamma, self.number_of_clusters, significant_cluster, model.llr_pvalue, self.cv_f1_score,
+                   self.cv_rocauc_score, self.cv_prec_score, self.cv_balanced_acc_score]
+
+        self.performance.append(content)
+
+    def plot_performance(self, sm):
+
+        df = pd.DataFrame(self.performance,
+                          columns=['gamma', 'cluster', 'significant_cluster', 'model_pvalue', 'f1', 'rocauc', 'prec',
+                                   'bal_acc'])
+
+        plt.scatter(df['cluster'], df['f1'], label='f1')
+        plt.scatter(df['cluster'], df['rocauc'], label='rocauc')
+        plt.scatter(df['cluster'], df['prec'], label='prec')
+        plt.scatter(df['cluster'], df['bal_acc'], label='bal_acc')
+        # plt.plot([i for i in range(len(df['cluster']))], [0.5 for i in range(len(df['f1']))], 'k--')
+        plt.legend()
+        plt.title('Performance vs. number of cluster for %s' % sm)
+        plt.show()
+        plt.clf()
+
+    def append_cluster_of_interest(self):
+
+        coef = list(zip(self.result.params, self.result.pvalues))
+        coef = list(enumerate(coef))
+
+        threshold = 0.05
+
+        if self.result.llr_pvalue < threshold: # model p-value < 0.05
+            for i, (b, p) in coef:
+                if p < threshold: # coef p value < 0.05
+                    if b < 0:
+                        self.cluster_of_interest_zero.append([i, (b, p), self.sequences_per_cluster[-1][i]])
+                    elif b > 0:
+                        self.cluster_of_interest_one.append([i, (b, p), self.sequences_per_cluster[-1][i]])
+                    else:
+                        print('Cluster has coefficient zero')
+
+    # TODO Methode for cluster overlap
+    def compute_cluster_overlap(self):
+        num_of_coi_one = len(self.cluster_of_interest_one)
+        num_of_coi_zero = len(self.cluster_of_interest_zero)
+
+        print('#COI one:', num_of_coi_one)
+        print('#COI zero:', num_of_coi_zero)
+
+        list_of_overlaps_one = []
+        list_of_overlaps_zero = []
+
+        for i, (b1, p1), s1 in self.cluster_of_interest_one:
+            for j, (b2, p2), s2 in self.cluster_of_interest_one:
+                print(type(s1), len(s1))
+                print(type(s2), len(s2))
+                if s1 == s2:
+                    print('ID worked.')
+                else:
+                    try:
+                        seq1 = [seq.seq for seq in s1]
+                        seq2 = [seq.seq for seq in s2]
+                        overlap = [seq for seq in seq1 if seq in seq2]
+                        print('%s sequences overlap, that equals a fraction of %s' % (str(len(overlap)), str(len(overlap)/max(len(s1), len(s2)))))
+                        list_of_overlaps_one.append(overlap)
+                    except NotImplementedError:
+                        print('NotImplementedError avoided.')
+                        pass
 
         for i, (b1, p1), s1 in self.cluster_of_interest_zero:
             for j, (b2, p2), s2 in self.cluster_of_interest_zero:
@@ -579,16 +700,39 @@ class Data:
             for i in range(num_of_cluster):
                 temp[i].append(p[i])
 
-    BLHD.set_sequences()
-    print(len(BLHD.sequences))
-    BLHD.set_num_seq()
-    print(BLHD.number_of_sequences)
+        fig, ax = plt.subplots(figsize=(40, 16))
+        labels = [str(i) for i in range(1, 96)]
 
-    sms = ['BLOSUM45', 'BLOSUM62', 'BLOSUM80', 'GONNET1992']
+        first = True
+        bottom = [0 for _ in range(1, 96)]
+        width = 0.7
+        for i in range(num_of_cluster):
+            if first:
+                first = False
+                ax.bar(labels, temp[i], width=width, label='Cluster %i' % (i + 1), bottom=bottom)
+                bottom = temp[i]
+            else:
+                ax.bar(labels, temp[i], width=width, label='Cluster %i' % (i + 1), bottom=bottom)
+                bottom = [i + j for i, j in zip(bottom, temp[i])]
 
-    for subma in sms:
+        ax.set_ylabel('Frequency', fontsize=24)
+        ax.set_title('Distribution of BL and HD sequences among cluster ', fontsize=24)
+        ax.legend(fontsize=16)
+        plt.xticks(fontsize=16)
+        plt.yticks(fontsize=16)
+        plt.show()
+        plt.clf()
 
-        BLHD.substitution_matrix = subma
-        BLHD.dm_location = fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/' + BLHD.origin + '_' + BLHD.substitution_matrix + '_' + str(BLHD.gap_open) + '_' + str(BLHD.gap_extend) + '_DM'
+                     # maxiter=,
+                     # method=
+                     # ‘newton’ for Newton - Raphson, ‘nm’ for Nelder-Mead
+                     # ‘bfgs’ for Broyden - Fletcher - Goldfarb - Shanno(BFGS)
+                     # ‘lbfgs’ for limited - memory BFGS with optional box constraints
+                     # ‘powell’ for modified Powell’s method
+                     # ‘cg’ for conjugate gradient
+                     # ‘ncg’ for Newton - conjugate gradient
+                     # ‘basinhopping’ for global basin-hopping solver
+                     # ‘minimize’ for generic wrapper of scipy minimize (BFGS by default)
 
-        BLHD.calculate_distance_matrix()
+                     # fit_regularized([start_params, method, …]) - - - Fit the model using a regularized maximum likelihood.
+
