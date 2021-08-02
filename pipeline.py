@@ -8,7 +8,7 @@ from joblib import Parallel, delayed, dump, load
 import pandas as pd
 import numpy as np
 import sys
-from itertools import combinations
+from itertools import combinations, product
 
 # Alignments
 from Bio import SeqIO, pairwise2
@@ -42,6 +42,7 @@ class Data:
                  ):
 
         # Root
+        self.performance = []
         self.gd_root = fr"/home/ubuntu/Enno/gammaDelta/sequence_data/"
         self.mnt_root = fr'/home/ubuntu/Enno/mnt/volume/'
 
@@ -91,13 +92,20 @@ class Data:
         self.lowest_coef = 0
         self.z = []
 
+        # Analysis
+        self.cluster_of_interest_one = []
+        self.cluster_of_interest_zero = []
+
+    # # # # # # # # # # #
+    #   SETTER METHODS  #
+    # # # # # # # # # # #
+
     def set_fasta_location(self):
 
         fasta_loc = self.gd_root + self.origin + '_fasta/' + self.origin + '_ALL_SEQUENCES.fasta'
         self.fasta_location = fasta_loc
 
     def set_dm_location(self):
-        # Todo Implement DM Calculation And Figure Out Name Tags
         self.dm_location = self.mnt_root + 'distance_matrices/' + self.origin + '_' + self.substitution_matrix + '_' + str(self.gap_open) + '_' + str(self.gap_extend) + '_DM'
 
     def set_cluster_location(self):
@@ -105,7 +113,6 @@ class Data:
         self.cluster_location = self.mnt_root + 'cluster/' + self.origin + '_' + self.substitution_matrix + '_' + str(self.gap_open) + '_' + str(self.gap_extend) + '_' + str(self.gamma) + '_C'
 
     def set_plot_location(self):
-        # Todo
         self.plot_location = self.gd_root + 'plots/' + self.origin + '_' + str(self.gamma)
 
     def set_sequences(self):
@@ -117,10 +124,13 @@ class Data:
 
     def set_data_frame(self):
 
-        # TODO Index column adjustment
         ix, iy = self.dm.shape
         self.dataframe = pd.DataFrame(data=self.dm, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
                                       columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
+
+    # # # # # # # # # # # #
+    #   DISTANCE MATRIX   #
+    # # # # # # # # # # # #
 
     def generate_batches_from_file(self):
 
@@ -128,7 +138,7 @@ class Data:
         for i in self.sequences:
             n_of_pairs += i[0]
 
-        n_jobs = 27  # TODO Magic number
+        n_jobs = 27
         sequences_per_job = math.ceil(n_of_pairs / n_jobs)
 
         job_batches = []
@@ -191,6 +201,7 @@ class Data:
             dmat[(p1.name, p2.name)] = d
 
     def set_dm(self):
+
         if os.path.isfile(self.dm_location):
             self.dm = load(self.dm_location)
         else:
@@ -214,7 +225,11 @@ class Data:
                 else:
                     continue
 
-    def set_embedding(self):
+    # # # # # # # # # # # # #
+    #  UMAP AND CLUSTERING  #
+    # # # # # # # # # # # # #
+
+    def set_embedding(self, spread, min_dist, a, b):
 
         sns.set(style='white', context='notebook', rc={'figure.figsize': (14, 10)})
 
@@ -275,6 +290,10 @@ class Data:
         if save_fig:
             plt.savefig(self.plot_location)
 
+    # # # # # # # # # # # #
+    #   FEATURE BUILDING  #
+    # # # # # # # # # # # #
+
     def split_origin_to_types(self):
 
         types = [self.origin[i:i + 2] for i in range(0, len(self.origin), 2)]
@@ -319,12 +338,6 @@ class Data:
             num_of_seq_per_patient.extend(self.get_number_of_sequences_per_patient(typ))
 
         sequences_per_cluster = [[] for _ in range(self.number_of_clusters)]
-
-        # if max(self.cluster_vector) != self.number_of_clusters:
-        #    print('Cluster vector adjusted.')
-        #    dic = dict(zip(np.unique(self.cluster_vector), range(self.number_of_clusters)))
-        #    new_cluster_vector = [dic[i] for i in self.cluster_vector]
-        #    self.cluster_vector = new_cluster_vector
 
         dic = dict(zip(np.unique(self.cluster_vector), range(self.number_of_clusters)))
         new_cluster_vector = [dic[i] for i in self.cluster_vector]
@@ -372,18 +385,89 @@ class Data:
 
         self.response = response
 
-    def build_model(self):
+    # # # # # # # # # # #
+    #   MODEL METHODS   #
+    # # # # # # # # # # #
+
+    def sk_build_model(self):
 
         self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.feature_vector, self.response,
                                                                                 test_size=0.2, stratify=self.response, random_state=2)
         self.model = LogisticRegression(solver='lbfgs', n_jobs=-1, C=self.regularization_c, random_state=2, max_iter=5000)
         self.model.fit(self.train_x, self.train_y)
 
-    def model_evaluation(self):
+    def sm_build_model(self, solver='newton', rnd_state=2, concat=False):
+
+        if concat:
+            self.final_feature = np.concatenate((self.final_feature, self.feature_vector), axis=1)
+        else:
+            self.final_feature = self.feature_vector
+
+        self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.final_feature, self.response,
+                                                                                test_size=0.2, stratify=self.response,
+                                                                                random_state=rnd_state)
+
+        self.model = sm.Logit(self.train_y, self.train_x)
+        self.result = self.model.fit(method=solver, maxiter=5000)
+
+        print(self.result.summary())
+
+    def sm_build_reg_model(self, l1_w=0):
+        self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.feature_vector, self.response,
+                                                                                test_size=0.2, stratify=self.response,
+                                                                                random_state=2)
+        self.model = sm.Logit(self.train_y, self.train_x).fit_regularized(L1_wt=l1_w, maxiter=150)
+        print(self.model.summary())
+
+    # # # # # # # # # # # # # # # #
+    #   MODEL EVALUATION METHODS  #
+    # # # # # # # # # # # # # # # #
+
+    def sk_model_evaluation(self):
 
         self.model_score = self.model.score(self.test_x, self.test_y)
 
-    def plot_roc(self):
+    def sk_set_model_report(self):
+
+        self.model_report = classification_report(self.test_y, self.model.predict(self.test_x))
+
+    def sk_cv_scores(self):
+
+        self.model = LogisticRegression(solver='lbfgs', random_state=2, max_iter=5000)
+
+        self.cv_f1_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='f1')))
+        self.cv_rocauc_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='roc_auc')))
+        self.cv_prec_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='precision')))
+        self.cv_balanced_acc_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='balanced_accuracy')))
+
+        print('CV F1 Score: \t %.3f' % self.cv_f1_score)
+        print('CV ROCAUC Score: \t %.3f' %  self.cv_rocauc_score)
+        print('CV AVG PREC Score: \t %.3f' %  self.cv_prec_score)
+        print('CV AVG BALANCED ACC Score: \t %.3f' %  self.cv_balanced_acc_score)
+
+    def sm_eval(self):
+        yhat = self.result.predict(self.test_x)
+        prediction = list(map(round, yhat))
+
+        print('Actual values', list(self.test_y))
+        print('Predictions :', prediction)
+        cm = confusion_matrix(self.test_y, prediction)
+        print("Confusion Matrix : \n ", cm[0], '\n', cm[1])
+        print('Test accuracy: ', accuracy_score(self.test_y, prediction))
+        print('Balanced accuravy: ', balanced_accuracy_score(self.test_y, prediction))
+        print('ROC AUC score: ', roc_auc_score(self.test_y, yhat))
+
+    def print_confusion_matrix(self):
+
+        co_ma = confusion_matrix(self.test_y, self.model.predict(self.test_x))
+        print(r'A\P', '\t', '0', '\t', '1')
+        print(12 * '=')
+
+        for i in range(2):
+            print(i, ' \t', co_ma[i, 0], '\t', co_ma[i, 1])
+            print(12 * '=')
+
+    def sk_plot_roc(self):
 
         probabilities = self.model.predict_proba(X=self.test_x)
         probabilities = probabilities[:, 1]
@@ -402,40 +486,60 @@ class Data:
         plt.show()
         plt.clf()
 
-    def set_model_report(self):
+    def sm_feature_plot(self):
 
-        self.model_report = classification_report(self.test_y, self.model.predict(self.test_x))
+    def highlight_clusters(self):
 
-    def print_confusion_matrix(self):
+        cmap = mcolors.ListedColormap(["grey", "green", "red"])
+        plt.scatter(self.embedding[:, 0], self.embedding[:, 1], c=self.z, cmap=cmap, s=5, alpha=0.25)
+        plt.title('Clusters of interest', fontsize=15)
+        plt.xlabel('UMAP 1')
+        plt.ylabel('UMAP 2')
+        plt.show()
 
-        co_ma = confusion_matrix(self.test_y, self.model.predict(self.test_x))
-        print(r'A\P', '\t', '0', '\t', '1')
-        print(12 * '=')
+    # Todo - Clusteroverlap
+    # Todo - Concatenate Featurevectors
+    # Todo - Downstream Analysis
 
-        for i in range(2):
-            print(i, ' \t', co_ma[i, 0], '\t', co_ma[i, 1])
-            print(12 * '=')
+        for i, (b1, p1), s1 in self.cluster_of_interest_zero:
+            for j, (b2, p2), s2 in self.cluster_of_interest_zero:
+                print(type(s1), len(s1))
+                print(type(s2), len(s2))
+                if s1 == s2:
+                    print('ID worked.')
+                else:
+                    try:
+                        seq1 = [seq.seq for seq in s1]
+                        seq2 = [seq.seq for seq in s2]
+                        overlap = [seq for seq in seq1 if seq in seq2]
+                        print('%s sequences overlap, that equals a fraction of %s' % (
+                        str(len(overlap)), str(len(overlap) / max(len(s1), len(s2)))))
+                        list_of_overlaps_one.append(overlap)
+                    except NotImplementedError:
+                        print('NotImplementedError avoided.')
+                        pass
 
-    def prepare_traceback(self):
+    def sk_prepare_traceback(self):
 
-        self.coef = self.model.coef_[0]
+            self.coef = self.model.coef_[0]
 
-        if len(self.coef) == self.number_of_clusters:
-            print('!!!!!!!!!!!!!!!!!!!!!!!!')
+            if len(self.coef) == self.number_of_clusters:
+                print('!!!!!!!!!!!!!!!!!!!!!!!!')
 
-        traceback = zip(self.coef, self.sequences_per_cluster, range(len(self.coef)))
-        traceback = list(traceback)
-        traceback = sorted(traceback, key=lambda cf: cf[0])
+            traceback = zip(self.coef, self.sequences_per_cluster, range(len(self.coef)))
+            traceback = list(traceback)
+            traceback = sorted(traceback, key=lambda cf: cf[0])
 
-        if self.number_of_clusters > 100:
-            self.highest_coef = traceback[-11:-1][-1]
-            self.lowest_coef = traceback[0:10][-1]
+            if self.number_of_clusters > 100:
+                self.highest_coef = traceback[-11:-1][-1]
+                self.lowest_coef = traceback[0:10][-1]
 
-        else:
-            self.highest_coef = traceback[-1][-1]
-            self.lowest_coef = traceback[0][-1]
+            else:
+                self.highest_coef = traceback[-1][-1]
+                self.lowest_coef = traceback[0][-1]
 
-    def set_z(self):
+
+    def sk_set_z(self):
 
         self.z = []
         for cluster in self.cluster_vector:
@@ -456,7 +560,7 @@ class Data:
 
         self.z = np.array(self.z)
 
-    def highlight_clusters(self):
+    def sk_highlight_clusters(self):
 
         cmap = mcolors.ListedColormap(["grey", "green", "red"])
         plt.scatter(self.embedding[:, 0], self.embedding[:, 1], c=self.z, cmap=cmap, s=5, alpha=0.25)
@@ -465,17 +569,15 @@ class Data:
         plt.ylabel('UMAP 2')
         plt.show()
 
-    # Todo - Clusteroverlap
-    # Todo - Concatenate Featurevectors
-    # Todo - Downstream Analysis
+    def plot_sequence_distribution(self):
 
+        data = self.feature_vector[-1]
+        num_of_cluster = len(data[0])
+        temp = [[] for _ in range(num_of_cluster)]
 
-if __name__ == '__main__':
-    BLHD = Data()
-    BLHD.fasta_location = '/home/ubuntu/Enno/gammaDelta/sequence_data/BLHD_fasta/BLHD_ALL_SEQUENCES.fasta'
-    BLHD.origin = 'BLHD'
-    BLHD.gap_open = 10
-    BLHD.gap_extend = 0.5
+        for p in data:
+            for i in range(num_of_cluster):
+                temp[i].append(p[i])
 
     BLHD.set_sequences()
     print(len(BLHD.sequences))
