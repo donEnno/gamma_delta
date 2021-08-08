@@ -12,7 +12,7 @@
 - Visualization: Cluster distribution, UMAP representation
 - Statistics about data
 
-- Write script for ML Cloud wiht substitution matrices and gap penalties as parameters
+- ~~Write script for ML Cloud wiht substitution matrices and gap penalties as parameters~~
 
 ### Pipeline
 - Clustering: implement kNN graph
