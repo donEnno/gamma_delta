@@ -366,6 +366,7 @@ class Data:
         print(self.result.summary())
 
     def prep_grid_search(self, gamma):
+        # TODO
         self.find
         model = LogisticRegression()
     # # # # # # # # # # # # # # # #
