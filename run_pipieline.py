@@ -2,6 +2,8 @@ import time
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
+import os
+import pickle
 
 from pipeline import Data
 
@@ -61,7 +63,7 @@ class DoStuff:
     def find_cluster(self, gamma=1.065):
 
         self.data.gamma = gamma
-        self.data.calculate_communities(save_cluster=False)
+        self.data.find_cluster(save_cluster=False)
         # self.data.plot_cluster(save_fig=False)
         print('', self.data.plot_location)
 
@@ -75,19 +77,6 @@ class DoStuff:
         self.data.calculate_feature_vector()
         print('check')
         # print(BLHD.feature_vector)
-
-    def sk_build_model(self, c=0.01):
-
-        self.data.regularization_c = c
-        self.data.sk_build_model()
-
-    def sm_build_model(self, solver, concat):
-
-        self.data.sm_build_model(solver, concat=concat)
-
-    def sm_build_reg_model(self, l1_w):
-
-        self.data.sm_build_reg_model(l1_w)
 
 
     def sm_predict_and_score(self):
@@ -118,20 +107,6 @@ class DoStuff:
         self.data.sk_set_z()
         self.data.sk_highlight_clusters()
 
-    def calculate_distance_matrices(self, sms):
-        self.set_dm_parameter(origin='BLHD', gap_open=10, gap_extend=0.5)
-        self.data.fasta_location = '/home/ubuntu/Enno/gammaDelta/sequence_data/BLHD_fasta/BLHD_ALL_SEQUENCES.fasta'
-
-        self.set_sequence_info()
-
-        for substitution_matrix in sms:
-
-            self.data.substitution_matrix = substitution_matrix
-            self.data.dm_location = fr'/home/ubuntu/Enno/mnt/volume/distance_matrices/' + self.data.origin + '_' + self.data.substitution_matrix + '_' + str(self.data.gap_open) + '_' + str(self.data.gap_extend) + '_DM'
-            print(self.data.dm_location)
-            self.data.calculate_distance_matrix()
-
-
 if __name__ == '__main__':
     path_to_blhd_identity_dm = '/home/ubuntu/Enno/mnt/volume/distance_matrices/BLHD_ID'
     path_to_blhd_b45_dm = '/home/ubuntu/Enno/mnt/volume/distance_matrices/BLHD_BLOSUM45_10_0.5_DM'
@@ -155,8 +130,6 @@ if __name__ == '__main__':
         print('CURRENT RUN:', obj_props, '\n')
 
         # Initialize run
-
-
         BLHD.set_dm_parameter()
         BLHD.set_directories(dm_path=path)
         BLHD.set_sequence_info()
@@ -171,9 +144,22 @@ if __name__ == '__main__':
             BLHD.build_feature()
             # BLHD.data.plot_sequence_distribution()
 
-            BLHD.sm_build_model(solver='lbfgs', concat=False)
-            BLHD.sm_predict_and_score()
-            BLHD.data.sk_cv_scores()
+            # ‘newton’ for Newton - Raphson, ‘nm’ for Nelder-Mead
+            # ‘bfgs’ for Broyden - Fletcher - Goldfarb - Shanno(BFGS)
+            # ‘lbfgs’ for limited - memory BFGS with optional box constraints
+            # ‘powell’ for modified Powell’s method
+            # ‘cg’ for conjugate gradient
+            # ‘ncg’ for Newton - conjugate gradient
+            # ‘basinhopping’ for global basin-hopping solver
+
+            BLHD.data.sk_build_feature_selection_model()
+
+            SOLVERS = ['bfgs', 'powell', 'newton']
+
+            for solver in SOLVERS:
+                BLHD.sm_build_model(solver=solver, concat=False)
+                BLHD.sm_predict_and_score()
+                BLHD.data.sk_cv_scores()
             # BLHD.data.sm_feature_plot()
 
             BLHD.data.append_cluster_of_interest()
@@ -215,13 +201,6 @@ if __name__ == '__main__':
 
 
 
-    # ‘newton’ for Newton - Raphson, ‘nm’ for Nelder-Mead
-    # ‘bfgs’ for Broyden - Fletcher - Goldfarb - Shanno(BFGS)
-    # ‘lbfgs’ for limited - memory BFGS with optional box constraints
-    # ‘powell’ for modified Powell’s method
-    # ‘cg’ for conjugate gradient
-    # ‘ncg’ for Newton - conjugate gradient
-    # ‘basinhopping’ for global basin-hopping solver
 
 
     """for gamma in gamma_batch:

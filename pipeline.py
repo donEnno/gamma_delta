@@ -1,19 +1,16 @@
 # Imports
 # Defaults
-import math
 import os
 import errno
 import time
-from joblib import Parallel, delayed, dump, load
+from joblib import load
 import pandas as pd
 import numpy as np
 import sys
 from itertools import combinations, product
 
 # Alignments
-from Bio import SeqIO, pairwise2
-from Bio.Align import substitution_matrices
-from Bio import Phylo
+from Bio import SeqIO
 
 # Projection
 import seaborn as sns
@@ -25,82 +22,27 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 
 # ML
-from sklearn.linear_model import LogisticRegression     # , LogisticRegressionCV
-from sklearn.metrics import classification_report, confusion_matrix,  accuracy_score
-from sklearn.model_selection import train_test_split    # , StratifiedShuffleSplit
-from sklearn.metrics import roc_curve, roc_auc_score, balanced_accuracy_score
-
 import statsmodels.api as sm
+from scipy.stats import norm
+
+from sklearn.calibration import calibration_curve
+from sklearn.model_selection import StratifiedKFold
+from sklearn.svm import l1_min_c
+from sklearn.linear_model import LogisticRegression     # , LogisticRegressionCV
+from sklearn.metrics import classification_report, confusion_matrix,  accuracy_score, roc_curve, roc_auc_score, \
+    balanced_accuracy_score, log_loss, brier_score_loss, precision_score, recall_score, f1_score
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.feature_selection import SelectKBest, chi2, RFECV
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_X_y, check_is_fitted, check_array
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.estimator_checks import check_estimator
-from sklearn.model_selection import cross_val_score
-
-
-class SMWrapper(BaseEstimator, RegressorMixin):
-    def __init__(self, fit_intercept=True):
-
-        self.fit_intercept = fit_intercept
-
-    """
-    Parameters
-    ------------
-    column_names: list
-            It is an optional value, such that this class knows 
-            what is the name of the feature to associate to 
-            each column of X. This is useful if you use the method
-            summary(), so that it can show the feature name for each
-            coefficient
-    """
-
-    def fit(self, X, y, column_names=()):
-
-        if self.fit_intercept:
-            X = sm.add_constant(X)
-
-        # Check that X and y have correct shape
-        X, y = check_X_y(X, y)
-
-        self.X_ = X
-        self.y_ = y
-
-        if len(column_names) != 0:
-            cols = column_names.copy()
-            cols = list(cols)
-            X = pd.DataFrame(X)
-            cols = column_names.copy()
-            cols.insert(0, 'intercept')
-            print('X ', X)
-            X.columns = cols
-
-        self.model_ = sm.Logit(y, X)
-        self.results_ = self.model_.fit()
-        return self
-
-    def predict(self, X):
-        # Check is fit had been called
-        check_is_fitted(self, 'model_')
-
-        # Input validation
-        X = check_array(X)
-
-        if self.fit_intercept:
-            X = sm.add_constant(X)
-        return self.results_.predict(X)
-
-    def get_params(self, deep=False):
-        return {'fit_intercept': self.fit_intercept}
-
-    def summary(self):
-        print(self.results_.summary())
 
 
 class Data:
-
     def __init__(self,
-                 origin='BLHD',
+                 origin='BLFUHD',
                  substitution_matirx='BLOSUM45',
                  gap_open=10,
                  gap_extend=0.5,
@@ -117,6 +59,7 @@ class Data:
         self.gap_extend = gap_extend
 
         # Sequence Data
+        self.number_of_patients = 0
         self.sequences = []
         self.number_of_sequences = 0
         self.dm = np.array([])
@@ -126,8 +69,6 @@ class Data:
         self.origin = origin
         self.fasta_location = ''
         self.dm_location = ''
-        self.cluster_location = ''
-        self.plot_location = ''
 
         # Cluster
         self.gamma = 0
@@ -166,118 +107,45 @@ class Data:
     #   SETTER METHODS  #
     # # # # # # # # # # #
 
-    def set_fasta_location(self):
+    def set_directories(self, dm,
+                        fasta_location='/home/ubuntu/Enno/gammaDelta/sequence_data/BLFUHD_fasta/BLFUHD_ALL_SEQUENCES.fasta'):
+        self.dm_location = dm
+        self.fasta_location = fasta_location
 
-        fasta_loc = self.gd_root + self.origin + '_fasta/' + self.origin + '_ALL_SEQUENCES.fasta'
-        self.fasta_location = fasta_loc
-
-    def set_dm_location(self):
-        self.dm_location = self.mnt_root + 'distance_matrices/' + self.origin + '_' + self.substitution_matrix + '_' + str(self.gap_open) + '_' + str(self.gap_extend) + '_DM'
-
-    def set_cluster_location(self):
-
-        self.cluster_location = self.mnt_root + 'cluster/' + self.origin + '_' + self.substitution_matrix + '_' + str(self.gap_open) + '_' + str(self.gap_extend) + '_' + str(self.gamma) + '_C'
-
-    def set_plot_location(self):
-        self.plot_location = self.gd_root + 'plots/' + self.origin + '_' + str(self.gamma)
-
-    def set_sequences(self):
-        self.sequences = list(enumerate(SeqIO.parse(self.fasta_location, "fasta")))
-
-    def set_num_seq(self):
-
-        self.number_of_sequences = len(self.sequences)
-
-    def set_data_frame(self):
-
-        ix, iy = self.dm.shape
-        self.dataframe = pd.DataFrame(data=self.dm, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
-                                      columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
-
-    # # # # # # # # # # # #
-    #   DISTANCE MATRIX   #
-    # # # # # # # # # # # #
-
-    def generate_batches_from_file(self):
-
-        n_of_pairs = 0
-        for i in self.sequences:
-            n_of_pairs += i[0]
-
-        n_jobs = 27
-        sequences_per_job = math.ceil(n_of_pairs / n_jobs)
-
-        job_batches = []
-        temp_batch = []
-        temp_sum = 0
-
-        for ix in self.sequences:
-            if not temp_batch:
-                temp_sum += ix[0]
-                temp_batch.append(ix)
-            elif temp_sum + ix[0] > sequences_per_job:
-                temp_sum = ix[0]
-                temp_batch.append(ix)
-                job_batches.append(temp_batch)
-                temp_batch = []
-            else:
-                temp_sum += ix[0]
-                temp_batch.append(ix)
-
-        job_batches.append(temp_batch)
-
-        return job_batches
-
-    def calculate_distance_matrix(self, identity=False):
-
-        output_filename_memmap = '/home/ubuntu/Enno/gammaDelta/joblib_memmap/output_memmap'
-        output = np.memmap(output_filename_memmap, dtype=float, mode='w+',
-                           shape=(self.number_of_sequences, self.number_of_sequences))
-
-        batches = self.generate_batches_from_file()
-
-        Parallel(n_jobs=-1, verbose=50)(delayed(self.compute_pairwise_scores)(identity, batch, output) for batch in batches)
-        dump(output, self.dm_location)
-
-    def set_dm(self):
-
+    def set_dm_properties(self, substitution_matrix, origin='BLFUHD', gap_open=10, gap_extend=0.5):
+        self.origin = origin
+        self.substitution_matrix = substitution_matrix
+        self.gap_open = gap_open
+        self.gap_extend = gap_extend
         if os.path.isfile(self.dm_location):
             self.dm = load(self.dm_location)
         else:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.dm_location)
 
-    def compute_pairwise_scores(self, identity: bool, batch: list, output):
+    def set_sequence_info(self):
+        self.sequences = list(enumerate(SeqIO.parse(self.fasta_location, "fasta")))
+        self.number_of_sequences = len(self.sequences)
 
-        matrix = substitution_matrices.load(self.substitution_matrix)
-
-        for seq_a in batch:
-            for seq_b in self.sequences:
-                if seq_a[0] > seq_b[0]:
-
-                    if not identity:
-                        res_ = pairwise2.align.globalds(seq_a[1].seq, seq_b[1].seq, matrix, -self.gap_open,
-                                                        -self.gap_extend, score_only=True)
-                    else:
-                        res_ = pairwise2.align.globalxx(seq_a[1].seq, seq_b[1].seq, score_only=True)
-
-                    output[seq_a[0]][seq_b[0]] = res_
-                else:
-                    continue
+    def set_basics(self, dm_path, substitution_matrix):
+        self.set_directories(dm=dm_path)
+        self.set_dm_properties(substitution_matrix=substitution_matrix)
+        self.set_sequence_info()
 
     # # # # # # # # # # # # #
     #  UMAP AND CLUSTERING  #
     # # # # # # # # # # # # #
 
-    def set_embedding(self, spread, min_dist, a, b):
+    def set_data_frame(self):
+        ix, iy = self.dm.shape
+        self.dataframe = pd.DataFrame(data=self.dm, index=[f'Sequence_{i}' for i in range(1, ix + 1)],
+                                      columns=[f'Sequence_{i}' for i in range(1, iy + 1)])
 
+    def set_embedding(self): # , spread, min_dist, a, b
         sns.set(style='white', context='notebook', rc={'figure.figsize': (14, 10)})
+        reducer = umap.UMAP() # spread=spread, min_dist=min_dist, a=a, b=b
+        self.embedding = reducer.fit_transform(self.dm)  # type(embedding) = <class 'numpy.ndarray'
 
-        reducer = umap.UMAP(spread=spread, min_dist=min_dist, a=a, b=b)
-        self.embedding = reducer.fit_transform(self.dataframe)  # type(embedding) = <class 'numpy.ndarray'
-
-
-    def set_graph(self):
-
+    def set_graph_heavy_memory(self):
         timer = time.time()
         counter = 0
         m, _ = self.dm.shape
@@ -295,58 +163,41 @@ class Data:
         self.graph = g
         print('This took %.3f' % (time.time()-timer))
 
-    def calculate_communities(self, save_cluster=False):
+    def find_cluster(self, gamma):
 
         cluster = networkit.community.detectCommunities(self.graph,
-                                                        algo=networkit.community.PLM(self.graph, refine=True, gamma=self.gamma))
+                                                        algo=networkit.community.PLM(self.graph, refine=True, gamma=gamma))
         cluster_vector = cluster.getVector()
         self.cluster = cluster
         self.cluster_vector = cluster_vector
         self.number_of_clusters = len(np.unique(self.cluster_vector))
 
-        if save_cluster:
-            dump(cluster_vector, self.cluster_location)
-
-    def set_cluster(self):
-
-        self.cluster = load(self.cluster_location)
-        self.cluster_vector = self.cluster.getVector()
-        self.number_of_clusters = len(np.unique(self.cluster_vector))
-
-        dic = dict(zip(np.unique(self.cluster_vector), range(self.number_of_clusters)))
-        new_cluster_vector = [dic[i] for i in self.cluster_vector]
-        self.cluster_vector = new_cluster_vector
-
-    def plot_cluster(self, save_fig=False):
+    def plot_cluster(self):
 
         cmap = cm.get_cmap('prism', max(self.cluster_vector) + 1)
         x = self.embedding[:, 0]
         y = self.embedding[:, 1]
         plt.scatter(x, y, cmap=cmap, c=list(self.cluster_vector), s=5, alpha=0.5)
-        plt.title(f'Louvain com. det. in UMAP projection, patient type: ' + self.origin + ' using gamma ' + str(self.gamma) +
+        plt.title(f'Louvain com. det. in UMAP projection using gamma ' + str(self.gamma) +
                   '\n' + str(self.number_of_clusters) + 'cluster found', fontsize=15)
         plt.xlabel('UMAP 1')
         plt.ylabel('UMAP 2')
         plt.show()
-        if save_fig:
-            plt.savefig(self.plot_location)
 
     # # # # # # # # # # # #
     #   FEATURE BUILDING  #
     # # # # # # # # # # # #
 
     def split_origin_to_types(self):
-
         types = [self.origin[i:i + 2] for i in range(0, len(self.origin), 2)]
         return types
 
     def get_number_of_sequences_per_patient(self, patient_type):
-
         list_of_num_seq = []
         path_to_seqs_per_origin = fr'/home/ubuntu/Enno/gammaDelta/sequence_data/{patient_type}_fasta/'
 
-        num_of_patients = len(os.listdir(path_to_seqs_per_origin))
-        num_of_patients = range(1, num_of_patients+1)
+        self.number_of_patients = len(os.listdir(path_to_seqs_per_origin))
+        num_of_patients = range(1, self.number_of_patients+1)
 
         for patient_number in num_of_patients:
             file = fr'{path_to_seqs_per_origin}{patient_type}_PATIENT_{patient_number}.fasta'
@@ -355,6 +206,7 @@ class Data:
         return list_of_num_seq
 
     def count_frequency_for_one_patient(self, patient_list, aa_sequences, sequences_per_cluster):
+        # TODO Maybe use freq as increment instead of 1
 
         frequency = np.zeros(self.number_of_clusters)
 
@@ -368,7 +220,6 @@ class Data:
         return frequency, sequences_per_cluster
 
     def calculate_feature_vector(self, absolute_toggle=True):
-
         absolute = []
         relative = []
         num_of_seq_per_patient = []
@@ -410,8 +261,7 @@ class Data:
         con_feature = []
 
         for gamma in gammas:
-            self.gamma = gamma
-            self.calculate_communities()
+            self.find_cluster(gamma=gamma)
             self.calculate_feature_vector()
 
             print(self.feature_vector.shape)
@@ -423,7 +273,6 @@ class Data:
         self.feature_vector = new_feature
 
     def set_response(self):
-
         response = []
 
         bl = [1 for _ in range(66)]
@@ -446,56 +295,145 @@ class Data:
     #   MODEL METHODS   #
     # # # # # # # # # # #
 
-    def sk_build_model(self):
-
+    def split_feature(self, rnd_state=2, split=0.2):
         self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.feature_vector, self.response,
-                                                                                test_size=0.2, stratify=self.response, random_state=2)
-        self.model = LogisticRegression(solver='lbfgs', n_jobs=-1, C=self.regularization_c, random_state=2, max_iter=5000)
-        self.model.fit(self.train_x, self.train_y)
-
-    def sm_build_model(self, solver='newton', rnd_state=2, concat=False):
-
-        if concat:
-            self.final_feature = np.concatenate((self.final_feature, self.feature_vector), axis=1)
-        else:
-            self.final_feature = self.feature_vector
-
-        self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.final_feature, self.response,
-                                                                                test_size=0.2, stratify=self.response,
+                                                                                test_size=split, stratify=self.response,
                                                                                 random_state=rnd_state)
 
+    def feature_selection(self, scoring, plot=False):
+        min_features_to_select = 1
+
+        rfecv = RFECV(estimator=self.model, step=1, cv=StratifiedKFold(5), scoring=scoring,
+                      min_features_to_select=min_features_to_select)
+        rfecv.fit(self.feature_vector, self.response)
+        self.reduced_feature_vector = rfecv.transform(self.feature_vector)
+
+        if plot:
+            plt.figure()
+            plt.xlabel("Number of features selected")
+            plt.ylabel("Cross validation score (nb of correct classifications)")
+            plt.plot(range(min_features_to_select,
+                           len(rfecv.grid_scores_) + min_features_to_select),
+                     rfecv.grid_scores_)
+            plt.show()
+
+    def sk_build_model(self, l1_ratio=None, penalty='l2', solver='lbfgs', reg_c=1):
+        """
+        :param penalty {‘l1’, ‘l2’, ‘elasticnet’, ‘none’}, default=’l2’
+                Used to specify the norm used in the penalization.
+                The ‘newton-cg’, ‘sag’ and ‘lbfgs’ solvers support only l2 penalties.
+                ‘elasticnet’ is only supported by the ‘saga’ solver.
+                If ‘none’ (not supported by the liblinear solver), no regularization is applied.
+        :param solver {‘newton-cg’, ‘lbfgs’, ‘liblinear’, ‘sag’, ‘saga’}, default=’lbfgs’
+                Algorithm to use in the optimization problem.
+                For small datasets, ‘liblinear’ is a good choice, whereas ‘sag’ and ‘saga’ are faster for large ones.
+                For multiclass problems, only ‘newton-cg’, ‘sag’, ‘saga’ and ‘lbfgs’ handle multinomial loss; ‘liblinear’ is limited to one-versus-rest schemes.
+                ‘newton-cg’, ‘lbfgs’, ‘sag’ and ‘saga’ handle L2 or no penalty
+                ‘liblinear’ and ‘saga’ also handle L1 penalty
+                ‘saga’ also supports ‘elasticnet’ penalty
+                ‘liblinear’ does not support setting penalty='none'
+                Note that ‘sag’ and ‘saga’ fast convergence is only guaranteed on features with approximately the same scale. You can preprocess the data with a scaler from sklearn.preprocessing.
+        :param l1_ratio The Elastic-Net mixing parameter, with 0 <= l1_ratio <= 1.
+                Only used if penalty='elasticnet'. Setting l1_ratio=0 is equivalent to using penalty='l2',
+                while setting l1_ratio=1 is equivalent to using penalty='l1'.
+                For 0 < l1_ratio <1, the penalty is a combination of L1 and L2.
+        :param reg_c:
+        :return:
+        """
+
+        self.model = LogisticRegression(penalty=penalty, solver=solver, l1_ratio=l1_ratio, n_jobs=-1, C=reg_c, random_state=2, max_iter=50000)
+        self.result = self.model.fit(self.train_x, self.train_y)
+
+    def sm_build_model(self, solver='lbfgs', alpha=0, reg=False):
+        """
+
+        :param solver: ‘newton’ for Newton - Raphson, ‘nm’ for Nelder-Mead
+                ‘bfgs’ for Broyden - Fletcher - Goldfarb - Shanno(BFGS)
+                ‘lbfgs’ for limited - memory BFGS with optional box constraints
+                ‘powell’ for modified Powell’s method
+                ‘cg’ for conjugate gradient
+                ‘ncg’ for Newton - conjugate gradient
+                ‘basinhopping’ for global basin-hopping solver
+        :return:
+        """
         self.model = sm.Logit(self.train_y, self.train_x)
-        self.result = self.model.fit(method=solver, maxiter=5000)
+
+        if reg:
+            self.result = self.model.fit_regularized(method='l1', alpha=alpha, maxiter=50000)
+        else:
+            self.result = self.model.fit(method=solver, maxiter=50000)
 
         print(self.result.summary())
 
-    def sm_build_reg_model(self, l1_w=0):
-        self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.feature_vector, self.response,
-                                                                                test_size=0.2, stratify=self.response,
-                                                                                random_state=2)
-        self.model = sm.Logit(self.train_y, self.train_x).fit_regularized(L1_wt=l1_w, maxiter=150)
-        print(self.model.summary())
-
+    def prep_grid_search(self, gamma):
+        self.find
+        model = LogisticRegression()
     # # # # # # # # # # # # # # # #
     #   MODEL EVALUATION METHODS  #
     # # # # # # # # # # # # # # # #
 
     def sk_model_evaluation(self):
+        self.model_score = self.result.score(self.test_x, self.test_y)
 
-        self.model_score = self.model.score(self.test_x, self.test_y)
+    def sk_evaluate_model(self):
+        self.model_report = classification_report(self.test_y, self.result.predict(self.test_x))
+        # TODO y_pred[:, 1] ?
+        y_pred = self.model.predict_proba(self.test_x)[:, 1]
+        ll = log_loss(self.test_y, y_pred)
+        print(self.model_report)
+        print('Log loss of current model is %d' % ll)
 
-    def sk_set_model_report(self):
+    def plot_calibration_curve(self, fig_index, name='Log. Reg.'):
+        """Plot calibration curve for est w/o and with calibration. """
 
-        self.model_report = classification_report(self.test_y, self.model.predict(self.test_x))
+        # Logistic regression with no calibration as baseline
+        lr = self.model
+
+        fig = plt.figure(fig_index, figsize=(10, 10))
+        ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+        ax2 = plt.subplot2grid((3, 1), (2, 0))
+
+        ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+
+        lr.fit(self.train_x, self.train_y)
+        y_pred = lr.predict(self.test_x)
+        if hasattr(lr, "predict_proba"):
+            prob_pos = lr.predict_proba(self.test_x)[:, 1]
+        else:  # use decision function
+            prob_pos = lr.decision_function(self.test_x)
+            prob_pos = (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
+        lr_score = brier_score_loss(self.test_y, prob_pos, pos_label=1)
+        print("%s:" % name)
+        print("\tBrier: %1.3f" % lr_score)
+        print("\tPrecision: %1.3f" % precision_score(self.test_y, y_pred))
+        print("\tRecall: %1.3f" % recall_score(self.test_y, y_pred))
+        print("\tF1: %1.3f\n" % f1_score(self.test_y, y_pred))
+
+        fraction_of_positives, mean_predicted_value = calibration_curve(self.test_y, prob_pos, n_bins=10)
+
+        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
+                 label="%s (%1.3f)" % (name, lr_score))
+
+        ax2.hist(prob_pos, range=(0, 1), bins=10, label=name,
+                 histtype="step", lw=2)
+
+        ax1.set_ylabel("Fraction of positives")
+        ax1.set_ylim([-0.05, 1.05])
+        ax1.legend(loc="lower right")
+        ax1.set_title('Calibration plots  (reliability curve)')
+
+        ax2.set_xlabel("Mean predicted value")
+        ax2.set_ylabel("Count")
+        ax2.legend(loc="upper center", ncol=2)
+
+        plt.tight_layout()
+        plt.show()
 
     def sk_cv_scores(self):
-
-        self.model = LogisticRegression(solver='lbfgs', random_state=2, max_iter=5000)
-
-        self.cv_f1_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='f1')))
-        self.cv_rocauc_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='roc_auc')))
-        self.cv_prec_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='precision')))
-        self.cv_balanced_acc_score = np.average(np.array(cross_val_score(self.model, self.final_feature, self.response, cv=5, scoring='balanced_accuracy')))
+        self.cv_f1_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='f1')))
+        self.cv_rocauc_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='roc_auc')))
+        self.cv_prec_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='precision')))
+        self.cv_balanced_acc_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='balanced_accuracy')))
 
         print('CV F1 Score: \t %.3f' % self.cv_f1_score)
         print('CV ROCAUC Score: \t %.3f' %  self.cv_rocauc_score)
@@ -517,7 +455,7 @@ class Data:
     def print_confusion_matrix(self):
 
         co_ma = confusion_matrix(self.test_y, self.model.predict(self.test_x))
-        print(r'A\P', '\t', '0', '\t', '1')
+        print(r'A\P', '\n', '\t', '0', '\t', '1')
         print(12 * '=')
 
         for i in range(2):
@@ -543,12 +481,59 @@ class Data:
         plt.show()
         plt.clf()
 
+    def logit_pvalue(self, model, x):
+        """ Calculate z-scores for scikit-learn LogisticRegression.
+        parameters:
+            model: fitted sklearn.linear_model.LogisticRegression with intercept and large C
+            x:     matrix on which the model was fit
+        This function uses asymtptics for maximum likelihood estimates.
+        """
+        p = model.predict_proba(x)
+        n = len(p)
+        m = len(model.coef_[0]) + 1
+        coefs = np.concatenate([model.intercept_, model.coef_[0]])
+        x_full = np.matrix(np.insert(np.array(x), 0, 1, axis=1))
+        ans = np.zeros((m, m))
+
+        for i in range(n):
+            ans = ans + np.dot(np.transpose(x_full[i, :]), x_full[i, :]) * p[i, 1] * p[i, 0]
+
+        vcov = np.linalg.inv(np.matrix(ans))
+        se = np.sqrt(np.diag(vcov))
+        t = coefs / se
+        p = (1 - norm.cdf(abs(t))) * 2
+
+        return p, t
+
     def sm_feature_plot(self):
 
         proba = 1 / (1 + np.exp(-self.result.fittedvalues))
         inc = 0.1
         _ = plt.hist(proba, bins=[i*inc for i in range(11)])
         plt.title('Hist with 10 bins')
+        plt.show()
+
+    def regularization_path(self):
+        cs = l1_min_c(self.feature_vector, self.response, loss='log') * np.logspace(0, 7, 16)
+
+        print("Computing regularization path ...")
+        start = time()
+        clf = LogisticRegression(penalty='l1', solver='liblinear', tol=1e-6, max_iter=int(1e6), warm_start=True,
+                                 intercept_scaling=10000.)
+        coefs_ = []
+        for c in cs:
+            clf.set_params(C=c)
+            clf.fit(self.feature_vector, self.response)
+            coefs_.append(clf.coef_.ravel().copy())
+        print("This took %0.3fs" % (time() - start))
+
+        coefs_ = np.array(coefs_)
+        plt.plot(np.log10(cs), coefs_, marker='o')
+        ymin, ymax = plt.ylim()
+        plt.xlabel('log(C)')
+        plt.ylabel('Coefficients')
+        plt.title('Logistic Regression Path')
+        plt.axis('tight')
         plt.show()
 
     def performance_sampling(self):
@@ -594,7 +579,6 @@ class Data:
                     else:
                         print('Cluster has coefficient zero')
 
-    # TODO Methode for cluster overlap
     def compute_cluster_overlap(self):
         num_of_coi_one = len(self.cluster_of_interest_one)
         num_of_coi_zero = len(self.cluster_of_interest_zero)
@@ -613,8 +597,8 @@ class Data:
                     print('ID worked.')
                 else:
                     try:
-                        seq1 = [seq.seq for seq in s1]
-                        seq2 = [seq.seq for seq in s2]
+                        seq1 = [seq.seq for i, seq in s1]
+                        seq2 = [seq.seq for i, seq in s2]
                         overlap = [seq for seq in seq1 if seq in seq2]
                         print('%s sequences overlap, that equals a fraction of %s' % (str(len(overlap)), str(len(overlap)/max(len(s1), len(s2)))))
                         list_of_overlaps_one.append(overlap)
@@ -630,11 +614,10 @@ class Data:
                     print('ID worked.')
                 else:
                     try:
-                        seq1 = [seq.seq for seq in s1]
-                        seq2 = [seq.seq for seq in s2]
+                        seq1 = [seq.seq for i, seq in s1]
+                        seq2 = [seq.seq for i, seq in s2]
                         overlap = [seq for seq in seq1 if seq in seq2]
-                        print('%s sequences overlap, that equals a fraction of %s' % (
-                        str(len(overlap)), str(len(overlap) / max(len(s1), len(s2)))))
+                        print('%s sequences overlap, that equals a fraction of %s' % (str(len(overlap)), str(len(overlap) / max(len(s1), len(s2)))))
                         list_of_overlaps_one.append(overlap)
                     except NotImplementedError:
                         print('NotImplementedError avoided.')
