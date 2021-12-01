@@ -1,34 +1,81 @@
-# _Methodenentwicklung zur Klassifikation des Patienten-Outcomes aufgrund von TCR Sequenzen_ (BA)
+# _gdTCR-MOCCA_
 
-**Vergangene Meetings:** 
+### Anstehend
+- ~~Ähnlichkeit der doppelt gesorteten Patienten bestimmen~~
+- ~~Mapping der Patienten und eCRF Nummern~~
+- Modelle für alle vier Kombinationen der doppelt gesorteten (ds) Patienten generieren
+  - absolute Häufigkeiten
+  - relative Häufigkeiten
+  - _freq_ als Zählmaß
+  - Wie verteilen sich die ds Patienten auf die Cluster?
+  
+**Auswahl der ds Patienten in Rücksprache mit Nicola und Kilian**
 
-23.04.2021, 10:00  
-24.30.04.2021, 11:00  
-Siehe MSA_Survey.pptx  
-07.05.2021, 14:00  
-Siehe Graph_Survey.pptx  
-14.05.2021, 14:00  
-21.05.2021, 14:00  
-04.06.2021, 14:00  
+Für die Modelle BLOSUM45, BLOSUM62, PAM70:
+- Klassifikation der Response: BL vs HD
+- Regression der PFS/OS
 
-**Nächstes Meeting: 21.05.2021, 14:00**
+Wichtigkeit: OS -> PFS -> Response
 
-## Outline
-- Multiple Sequence Alignment in verschiedenen Modalitäten
-- Sequenzen nach diesem MSA sortiereren/clustern = Spätere Features für das ML Modell
-- ML Modell (lineare/logistische Methoden)
-- Klassifikator zum Outcome eine Patienten
-- I/O: TCR Sequenz/Patient gesund oder krank bzw. Prognose über Medikation
-
-## TODO
-- T-Coffee: Distanzmaß aus Tool extrahieren
-- ClustalO/w: Distanzmaß aus Tool extrahieren
--	Pipeline bauen (Prototyping): MSA, Distanzmatrizen, Klassifizierer
-- Visualisierungen/Slides zur Präsentation generieren
+#### Wichtige Infos über die signifikanten Cluster
+- Unique Sequenzen
+- Patienten-Verteilung
+- Delta-Ketten-Verteilung
 
 
-## "Warentest"
--	Kriterien in "Stiftung Warentest" genauer recherchieren, welche davon sind für uns wichtig?
--	TCoffe Resultat (extended library) als Distanzen für Clustering verwenden
--	Genaue Methodik von ClustaIO nachvollziehen (word2vec interessant?) --> HMM Profile?
+## Misc
+- BL vs FU: Matching gemeinsamer Sequenzen
+# _gdTCR-MOCCA_
 
+### Anstehend
+- ~~Ähnlichkeit der doppelt gesorteten Patienten bestimmen~~
+- ~~Mapping der Patienten und eCRF Nummern~~
+- Modelle für alle vier Kombinationen der doppelt gesorteten (ds) Patienten generieren
+  - absolute Häufigkeiten
+  - relative Häufigkeiten
+  - _freq_ als Zählmaß
+  - Wie verteilen sich die ds Patienten auf die Cluster?
+  
+**Auswahl der ds Patienten in Rücksprache mit Nicola und Kilian**
+
+Für die Modelle BLOSUM45, BLOSUM62, PAM70:
+- Klassifikation der Response: BL vs HD
+- Regression der PFS/OS
+
+Wichtigkeit: OS -> PFS -> Response
+
+#### Wichtige Infos über die signifikanten Cluster
+- Unique Sequenzen
+- Patienten-Verteilung
+- Delta-Ketten-Verteilung
+
+
+## Misc
+- BL vs FU: Matching gemeinsamer Sequenzen
+# _gdTCR-MOCCA_
+
+### Anstehend
+- ~~Ähnlichkeit der doppelt gesorteten Patienten bestimmen~~
+- ~~Mapping der Patienten und eCRF Nummern~~
+- Modelle für alle vier Kombinationen der doppelt gesorteten (ds) Patienten generieren
+  - absolute Häufigkeiten
+  - relative Häufigkeiten
+  - _freq_ als Zählmaß
+  - Wie verteilen sich die ds Patienten auf die Cluster?
+  
+**Auswahl der ds Patienten in Rücksprache mit Nicola und Kilian**
+
+Für die Modelle BLOSUM45, BLOSUM62, PAM70:
+- Klassifikation der Response: BL vs HD
+- Regression der PFS/OS
+
+Wichtigkeit: OS -> PFS -> Response
+
+#### Wichtige Infos über die signifikanten Cluster
+- Unique Sequenzen
+- Patienten-Verteilung
+- Delta-Ketten-Verteilung
+
+
+## Misc
+- BL vs FU: Matching gemeinsamer Sequenzen
