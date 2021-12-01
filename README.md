@@ -1,22 +1,27 @@
-# _Bachelorthesis: Method development for classification ofpatient outcome based on TCR sequences_
+# _gdTCR-MOCCA_
 
-## Outline
-- I/O: TCR Sequences/Patient healthy or sick or prognosis about medication
-- Calculate distance matrices (DM) from raw sequences
-- Find cluster of sequences based on the DMs
-- Use cluster as input for logistic regression
-- Analyze results
--  
-## TODO
-### Data
-- Visualization: Cluster distribution, UMAP representation
-- Statistics about data
+### Anstehend
+- ~~Ähnlichkeit der doppelt gesorteten Patienten bestimmen~~
+- ~~Mapping der Patienten und eCRF Nummern~~
+- Modelle für alle vier Kombinationen der doppelt gesorteten (ds) Patienten generieren
+  - absolute Häufigkeiten
+  - relative Häufigkeiten
+  - _freq_ als Zählmaß
+  - Wie verteilen sich die ds Patienten auf die Cluster?
+  
+**Auswahl der ds Patienten in Rücksprache mit Nicola und Kilian**
 
-- ~~Write script for ML Cloud wiht substitution matrices and gap penalties as parameters~~
+Für die Modelle BLOSUM45, BLOSUM62, PAM70:
+- Klassifikation der Response: BL vs HD
+- Regression der PFS/OS
 
-### Pipeline
-- Clustering: implement kNN graph
-- Models: Summarize overlap findings, handle outliers, variable selection (?)
+Wichtigkeit: OS -> PFS -> Response
 
-### Thesis
-- Write
+#### Wichtige Infos über die signifikanten Cluster
+- Unique Sequenzen
+- Patienten-Verteilung
+- Delta-Ketten-Verteilung
+
+
+## Misc
+- BL vs FU: Matching gemeinsamer Sequenzen
