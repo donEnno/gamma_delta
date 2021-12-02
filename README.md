@@ -25,3 +25,4 @@ Wichtigkeit: OS -> PFS -> Response
 
 ## Misc
 - BL vs FU: Matching gemeinsamer Sequenzen
+- MART-1 Sequenzen 
