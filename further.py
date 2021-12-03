@@ -44,15 +44,15 @@ data_fu = data_root + 'FU/'
 data_hd = data_root + 'HD/'
 data_si = data_root + 'sick/'
 
-P1003_BL = 'CopyOfVDJTOOLS_.1003_2553_SA78_S78_L001_R1.txt'  # BL_PATIENT_1.fasta             \/
+P1003_BL = 'CopyOfVDJTOOLS_.1003_2553_SA78_S78_L001_R1.txt'  # BL_PATIENT_1.fasta
 P1004_BL = 'CopyOfVDJTOOLS_.1004_2554_SA79_S79_L001_R1.txt'  # BL_PATIENT_2.fasta
 P1003_BL_4_1 = 'VDJTOOLS_.1003_BL_4-1-TCRD_S36_L001_R1.txt'  # BL_PATIENT_49.fasta
 P1004_BL_4_3 = 'VDJTOOLS_.1004_BL_4-3-TCRD_S38_L001_R1.txt'  # BL_PATIENT_50.fasta
 
 P1003_FU = 'CopyOfVDJTOOLS_.1003_2564_SA92_S92_L001_R1.txt'  # FU_PATIENT_1.fasta
-P1004_FU = 'CopyOfVDJTOOLS_.1004_2568_SA93_S93_L001_R1.txt'  # FU_PATIENT_2.fasta             \/
+P1004_FU = 'CopyOfVDJTOOLS_.1004_2568_SA93_S93_L001_R1.txt'  # FU_PATIENT_2.fasta
 P1003_FU_4_2 = 'VDJTOOLS_.1003_FU_4-2-TCRD_S37_L001_R1.txt'  # FU_PATIENT_44.fasta
-P1004_FU_4_4 = 'VDJTOOLS_.1004_FU_4-4-TCRD_S39_L001_R1.txt'  # FU_PATIENT_45.fasta            \/
+P1004_FU_4_4 = 'VDJTOOLS_.1004_FU_4-4-TCRD_S39_L001_R1.txt'  # FU_PATIENT_45.fasta
 
 dm_root = '/home/ubuntu/Enno/mnt/volume/dm_in_use/'
 
@@ -107,7 +107,7 @@ def parse_all_sequences():
         if line.startswith('>'):
             headers.append(line)
         else:
-            seq.append(line)
+            seq.append(line.strip())
 
     return np.array(headers), np.array(seq)
 
@@ -249,98 +249,58 @@ class Classification:
                 adjusted_cluster_vector = [x+increment for x in cluster_vector]
                 self.clusters.append(adjusted_cluster_vector)
 
-    def build_feature_from_cluster(self):
+    def build_feature_from_cluster(self, kind='absolute'):
 
-        headers, seq = parse_all_sequences()
+        if kind not in ['absolute', 'relative', 'freq']:
+            raise ValueError('\'kind\' has to be either \'absolute\', \'relative\' or \'freq\'')
+
+        sequences_per_clustering = []
         first_loop = True
 
-        for cluster in self.clusters:                                           # for every clustering
+        for cluster in self.clusters:  # for every clustering
+            cluster = np.array(cluster)
             patient_ix = 0
 
-            for cohort in [self.bl, self.fu, self.hd]:                          # for every cohort
-                num_cluster = len(np.unique(cluster))
-                sequence_distribution = np.zeros(121, num_cluster)
-                sequences_per_cluster = [[] for _ in range(num_cluster)]
+            num_cluster = len(np.unique(cluster))
+            sequence_distribution = np.zeros((150, num_cluster))
+            sequences_per_cluster = [[] for _ in range(num_cluster)]
 
-                for df, ecrf, tag in cohort:                                    # for every patient within cohort
+            for cohort in [self.bl, self.fu, self.hd]:  # for every cohort
+
+                for df, ecrf, tag in cohort:  # for every patient within cohort
                     indices = get_patient_indices(tag)
                     dic = dict(zip(np.unique(cluster), range(num_cluster)))
 
-                    patient_sequences = seq[indices]
-                    patient_clusters = cluster[indices]
-                    adjusted_patient_clusters = [dic[i] for i in patient_clusters]
+                    patient_sequences = np.array(df['cdr3aa'].to_list())
+                    patient_frequencies = np.array(df['freq'].to_list())
 
-                    for s, c in zip(patient_sequences, adjusted_patient_clusters):
-                        # TODO include freq
-                        sequence_distribution[patient_ix, c] += 1
+                    patient_clusters = cluster[indices]
+                    adjusted_patient_cluster = [dic[i] for i in patient_clusters]
+
+                    for s, c, f in zip(patient_sequences, adjusted_patient_cluster, patient_frequencies):
+                        if kind == 'relative' or kind == 'absolute':
+                            sequence_distribution[patient_ix, c] += 1
+                        if kind == 'freq':
+                            sequence_distribution[patient_ix, c] += f
+
                         sequences_per_cluster[c].append(s)
 
                     patient_ix += 1
+                sequences_per_clustering.append(sequences_per_cluster)
 
             if first_loop:
-                feature_vector = sequence_distribution
+                self.feature_vector = sequence_distribution
+                first_loop = False
             else:
-                feature_vector = np.concatenate((feature_vector, sequence_distribution), axis=1)
+                self.feature_vector = np.concatenate((self.feature_vector, sequence_distribution), axis=1)
 
+        if kind == 'relative':
+            self.feature_vector = self.feature_vector / self.feature_vector.sum(axis=0)
 
-
-
-"""
-        # TODO for loop for each clustering
-        frequency = np.zeros(self.clusters[0])
-
-        for aa, (s, c) in zip(aa_sequences, patient_list):
-            if frequency[c] == 0:
-                frequency += 1
-            else:
-                frequency[c] += 1
-            sequences_per_cluster[c].append(aa)
-
-        return frequency, sequences_per_cluster
-
-        def calculate_feature_vector(self, absolute_toggle=True):
-            absolute = []
-            relative = []
-            num_of_seq_per_patient = []
-
-            patient_types = self.split_origin_to_types()
-
-            for typ in patient_types:
-                num_of_seq_per_patient.extend(self.get_number_of_sequences_per_patient(typ))
-
-            sequences_per_cluster = [[] for _ in range(self.number_of_clusters)]
-
-            dic = dict(zip(np.unique(self.cluster_vector), range(self.number_of_clusters)))
-            new_cluster_vector = [dic[i] for i in self.cluster_vector]
-            self.cluster_vector = new_cluster_vector
-
-            cluster_tuple_list = list(zip(range(self.number_of_sequences), self.cluster_vector))
-
-            upper = 0
-            for chunk in num_of_seq_per_patient:
-                lower = upper
-                upper += chunk
-
-                # Split partition and list_of_sequences in [lower:upper] where [l:u] is the range of sequences for one patient.
-                temp_freq, sequences_per_cluster = self.count_frequency_for_one_patient(cluster_tuple_list[lower:upper],
-                                                                                        self.sequences[lower:upper],
-                                                                                        sequences_per_cluster)
-                temp_sum = sum(temp_freq)
-                absolute.append(temp_freq)
-                relative.append(temp_freq / temp_sum)
-
-            if absolute_toggle:
-                self.feature_vector = np.array(absolute)
-            else:
-                self.feature_vector = np.array(relative)
-            self.sequences_per_cluster = sequences_per_cluster
-"""
 
 # TODO Classification w/ feature selection
 # TODO Wald test
 # TODO feature analysis
-
-
 # TODO UMAP embedding
 
 # # # # # # # # # #
@@ -373,7 +333,16 @@ if __name__ == '__main__':
 
     obj.dm_to_graph()
     obj.louvain([1.00, 1.05, 1.10, 1.15, 1.16, 1.17])
-    obj.build_feature_from_cluster()
+
+    obj.build_feature_from_cluster(kind='absolute')
+    print(obj.feature_vector)
+
+    obj.build_feature_from_cluster(kind='relative')
+    print(obj.feature_vector)
+
+    obj.build_feature_from_cluster(kind='freq')
+    print(obj.feature_vector)
+
 
     var_i = []
     var_ii = ['BL_PATIENT_1', 'BL_PATIENT_2', 'BL_PATIENT_49', 'BL_PATIENT_50', 'FU_PATIENT_1', 'FU_PATIENT_2', 'FU_PATIENT_44', 'FU_PATIENT_45']
