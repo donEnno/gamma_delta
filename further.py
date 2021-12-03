@@ -6,17 +6,20 @@ import pandas as pd
 import os
 import errno
 import joblib
+
 # from sklearn.model_selection import StratifiedKFold, GridSearchCV, RepeatedStratifiedKFold
 # from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
 # from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
 # from sklearn.model_selection import train_test_split, cross_val_score
 # from sklearn.feature_selection import RFECV, RF# E
 
+
 # from pipeline import Data
 
 # # # # # # # # #
 # M E T H O D S #
 # # # # # # # # #
+
 
 
 def morisita_horn(x, y, s):
@@ -97,7 +100,9 @@ def double_sorted_overlaps():
 # C O M P A R E M O D E L S #
 # # # # # # # # # # # # # # #
 
+
 def parse_all_sequences():
+
     with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
         lines = file.readlines()
 
@@ -187,6 +192,7 @@ def get_patient_indices(patient: str):
 
 
 class Classification:
+
     def __init__(self, dm: np.array, sm: str, gp: tuple,
                  bl: list, fu: list, hd: list):
         # basics
@@ -230,6 +236,7 @@ class Classification:
         self.graph = g
 
     def louvain(self, gammas):
+
         first_loop = True
         for g in gammas:
 
@@ -298,6 +305,7 @@ class Classification:
 
         return frequency, sequences_per_cluster
 
+
         def calculate_feature_vector(self, absolute_toggle=True):
             absolute = []
             relative = []
@@ -335,6 +343,7 @@ class Classification:
                 self.feature_vector = np.array(relative)
             self.sequences_per_cluster = sequences_per_cluster
 """
+
 
 # TODO Classification w/ feature selection
 # TODO Wald test
@@ -374,6 +383,7 @@ if __name__ == '__main__':
     obj.dm_to_graph()
     obj.louvain([1.00, 1.05, 1.10, 1.15, 1.16, 1.17])
     obj.build_feature_from_cluster()
+
 
     var_i = []
     var_ii = ['BL_PATIENT_1', 'BL_PATIENT_2', 'BL_PATIENT_49', 'BL_PATIENT_50', 'FU_PATIENT_1', 'FU_PATIENT_2', 'FU_PATIENT_44', 'FU_PATIENT_45']
