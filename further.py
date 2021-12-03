@@ -1,37 +1,3 @@
-"""
-
-- Ähnlichkeit der Doppelten
-
-Modelle:
-- B45, B62, PAM beste Modelle
-	+ absolut vs relativ
-	+ freq Modelle
-
-	- hierfür 4 Varianten
-		+ Wie verteilen sich diedoppelten Patienten im Clustering?
-		+ Häufigkeiten der Doppelten über die Cluster
-
-Erst nach den vier Varianten:
-- BL vs HD (für die 3)
-
-- Response
-
-- Regression der PFS/OS
-
-Wichtigkeit: OS -> PFS -> Response
-
-@sig. Cluster
-- Eigenschaften der Cluster:
-	+ unique Seq
-	+ Patienten
-	+ Delta-Ketten
-
-- BL vs FU (matching)
-
-- gemeinsame Sequenzen
-
-
-"""
 import resource
 
 import networkit
@@ -40,11 +6,11 @@ import pandas as pd
 import os
 import errno
 import joblib
-from sklearn.model_selection import StratifiedKFold, GridSearchCV, RepeatedStratifiedKFold
-from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
-from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.feature_selection import RFECV, RFE
+# from sklearn.model_selection import StratifiedKFold, GridSearchCV, RepeatedStratifiedKFold
+# from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
+# from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
+# from sklearn.model_selection import train_test_split, cross_val_score
+# from sklearn.feature_selection import RFECV, RF# E
 
 # from pipeline import Data
 
@@ -143,7 +109,7 @@ def parse_all_sequences():
         else:
             seq.append(line)
 
-    return headers, seq
+    return np.array(headers), np.array(seq)
 
 
 def check_ecrf(path_to_txt, kind='BL', print_out=True):
@@ -182,8 +148,6 @@ def reduce_dm(patient, dm_filename):
     :param dm_filename:
     :return:
     """
-    with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
-        lines = file.readlines()
 
     dm_path = dm_root + dm_filename
     if os.path.isfile(dm_path):
@@ -244,10 +208,9 @@ class Classification:
         self.positive_significant_feature = []
         self.negative_significant_feature = []
 
-    def dm_to_graph(self, dm):
+    def dm_to_graph(self):
         """
         Transforms the distance matrix dm into a graph g on which the Louvain method can be performed.
-        :param dm: distance matrix in lower triangular format
         """
 
         counter = 0
@@ -266,7 +229,7 @@ class Classification:
 
         self.graph = g
 
-    def louvain(self, graph, gammas):
+    def louvain(self, gammas):
         first_loop = True
         for g in gammas:
 
@@ -288,20 +251,41 @@ class Classification:
 
     def build_feature_from_cluster(self):
 
-        number_of_sequences_per_patient = []
-        for cohort in [self.bl, self.fu, self.hd]:
-            cohort_temp = []
-            for df, ecrf, tag in cohort:
-                n, _ = df.shape
-                cohort_temp.append(n)
+        headers, seq = parse_all_sequences()
+        first_loop = True
 
-                indices = get_patient_indices(tag)
+        for cluster in self.clusters:                                           # for every clustering
+            patient_ix = 0
+
+            for cohort in [self.bl, self.fu, self.hd]:                          # for every cohort
+                num_cluster = len(np.unique(cluster))
+                sequence_distribution = np.zeros(121, num_cluster)
+                sequences_per_cluster = [[] for _ in range(num_cluster)]
+
+                for df, ecrf, tag in cohort:                                    # for every patient within cohort
+                    indices = get_patient_indices(tag)
+                    dic = dict(zip(np.unique(cluster), range(num_cluster)))
+
+                    patient_sequences = seq[indices]
+                    patient_clusters = cluster[indices]
+                    adjusted_patient_clusters = [dic[i] for i in patient_clusters]
+
+                    for s, c in zip(patient_sequences, adjusted_patient_clusters):
+                        # TODO include freq
+                        sequence_distribution[patient_ix, c] += 1
+                        sequences_per_cluster[c].append(s)
+
+                    patient_ix += 1
+
+            if first_loop:
+                feature_vector = sequence_distribution
+            else:
+                feature_vector = np.concatenate((feature_vector, sequence_distribution), axis=1)
 
 
-            number_of_sequences_per_patient.append(cohort_temp)
 
 
-        # TODO Maybe use freq as increment instead of 1
+"""
         # TODO for loop for each clustering
         frequency = np.zeros(self.clusters[0])
 
@@ -350,7 +334,7 @@ class Classification:
             else:
                 self.feature_vector = np.array(relative)
             self.sequences_per_cluster = sequences_per_cluster
-
+"""
 
 # TODO Classification w/ feature selection
 # TODO Wald test
@@ -386,6 +370,10 @@ if __name__ == '__main__':
                          fu=check_ecrf(data_fu, 'FU', print_out=False),
                          hd=check_ecrf(data_hd, 'HD', print_out=False)
                          )
+
+    obj.dm_to_graph()
+    obj.louvain([1.00, 1.05, 1.10, 1.15, 1.16, 1.17])
+    obj.build_feature_from_cluster()
 
     var_i = []
     var_ii = ['BL_PATIENT_1', 'BL_PATIENT_2', 'BL_PATIENT_49', 'BL_PATIENT_50', 'FU_PATIENT_1', 'FU_PATIENT_2', 'FU_PATIENT_44', 'FU_PATIENT_45']
