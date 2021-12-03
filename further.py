@@ -53,17 +53,17 @@ from sklearn.feature_selection import RFECV, RFE
 # # # # # # # # #
 
 
-def morisita_horn(X: list, Y: list, S: list):
+def morisita_horn(x, y, s):
     z = 0
     n = 0
     m = 0
-    x = len(X)
-    y = len(Y)
-    for unique_sequence in S:
-        z = z + X.count(unique_sequence) * Y.count(unique_sequence)
-        n = n + X.count(unique_sequence) ** 2
-        m = m + Y.count(unique_sequence) ** 2
-    C = 2 * z / (((n / x ** 2) + (m / y ** 2)) * x * y)
+    x_len = len(x)
+    y_len = len(y)
+    for unique_sequence in s:
+        z = z + x.count(unique_sequence) * y.count(unique_sequence)
+        n = n + x.count(unique_sequence) ** 2
+        m = m + y.count(unique_sequence) ** 2
+    C = 2 * z / (((n / x_len ** 2) + (m / y_len ** 2)) * x_len * y_len)
     return C
 
 
@@ -131,7 +131,7 @@ def double_sorted_overlaps():
 # C O M P A R E M O D E L S #
 # # # # # # # # # # # # # # #
 
-def check_eCRF(path_to_txt, kind='BL', print_out=True):
+def parse_all_sequences():
     with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
         lines = file.readlines()
 
@@ -142,6 +142,12 @@ def check_eCRF(path_to_txt, kind='BL', print_out=True):
             headers.append(line)
         else:
             seq.append(line)
+
+    return headers, seq
+
+
+def check_ecrf(path_to_txt, kind='BL', print_out=True):
+    headers, seq = parse_all_sequences()
 
     seq = list(zip(headers, seq))
     seq = [(h.strip(), s.strip()) for h, s in seq]
@@ -205,18 +211,10 @@ def get_patient_indices(patient: str):
     if not patient.endswith('_'):
         patient = patient + '_'
 
-    with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
-        lines = file.readlines()
-
-    headers = []
-    seq = []
-    for line in lines:
-        if line.startswith('>'):
-            headers.append(line)
-        else:
-            seq.append(line)
+    headers, seq = parse_all_sequences()
 
     ixs = [ix for ix, header in enumerate(headers) if patient in header]
+
     return ixs
 
 # # # # # # # # # # # # # # # #
@@ -225,11 +223,17 @@ def get_patient_indices(patient: str):
 
 
 class Classification:
-    def __init__(self, dm: np.array, sm: str, gp: tuple):
-        # fundamentals
+    def __init__(self, dm: np.array, sm: str, gp: tuple,
+                 bl: list, fu: list, hd: list):
+        # basics
         self.distance_matrix = dm
         self.substitution_matrix = sm
         self.gap_penalties = gp
+        # patient data - (df, eCRF, ID)
+        self.bl = bl
+        self.fu = fu
+        self.hd = hd
+
         # louvain
         self.graph = []
         self.clusters = []
@@ -283,32 +287,32 @@ class Classification:
                 self.clusters.append(adjusted_cluster_vector)
 
     def build_feature_from_cluster(self):
-        def get_number_of_sequences_per_patient(self, patient_type):
-            list_of_num_seq = []
-            path_to_seqs_per_origin = fr'/home/ubuntu/Enno/gammaDelta/sequence_data/{patient_type}_fasta/'
 
-            self.number_of_patients = len(os.listdir(path_to_seqs_per_origin))
-            num_of_patients = range(1, self.number_of_patients + 1)
+        number_of_sequences_per_patient = []
+        for cohort in [self.bl, self.fu, self.hd]:
+            cohort_temp = []
+            for df, ecrf, tag in cohort:
+                n, _ = df.shape
+                cohort_temp.append(n)
 
-            for patient_number in num_of_patients:
-                file = fr'{path_to_seqs_per_origin}{patient_type}_PATIENT_{patient_number}.fasta'
-                list_of_num_seq.append(len([1 for line in open(file) if line.startswith(">")]))
+                indices = get_patient_indices(tag)
 
-            return list_of_num_seq
 
-        def count_frequency_for_one_patient(self, patient_list, aa_sequences, sequences_per_cluster):
-            # TODO Maybe use freq as increment instead of 1
+            number_of_sequences_per_patient.append(cohort_temp)
 
-            frequency = np.zeros(self.number_of_clusters)
 
-            for aa, (s, c) in zip(aa_sequences, patient_list):
-                if frequency[c] == 0:
-                    frequency += 1
-                else:
-                    frequency[c] += 1
-                sequences_per_cluster[c].append(aa)
+        # TODO Maybe use freq as increment instead of 1
+        # TODO for loop for each clustering
+        frequency = np.zeros(self.clusters[0])
 
-            return frequency, sequences_per_cluster
+        for aa, (s, c) in zip(aa_sequences, patient_list):
+            if frequency[c] == 0:
+                frequency += 1
+            else:
+                frequency[c] += 1
+            sequences_per_cluster[c].append(aa)
+
+        return frequency, sequences_per_cluster
 
         def calculate_feature_vector(self, absolute_toggle=True):
             absolute = []
@@ -376,9 +380,12 @@ if __name__ == '__main__':
     double_sorted_df = double_sorted_overlaps()
     print(double_sorted_df)
 
-    lo_bl_df = check_eCRF(data_bl, 'BL', print_out=False)       # (df, eCRF, ID)
-    lo_fu_df = check_eCRF(data_fu, 'FU', print_out=False)
-    lo_hd_df = check_eCRF(data_hd, 'HD', print_out=True)
+    # Init
+    obj = Classification(dm=joblib.load(dm_root+b45), sm='BLOSUM45', gp=(1, 0.1),
+                         bl=check_ecrf(data_bl, 'BL', print_out=False),
+                         fu=check_ecrf(data_fu, 'FU', print_out=False),
+                         hd=check_ecrf(data_hd, 'HD', print_out=False)
+                         )
 
     var_i = []
     var_ii = ['BL_PATIENT_1', 'BL_PATIENT_2', 'BL_PATIENT_49', 'BL_PATIENT_50', 'FU_PATIENT_1', 'FU_PATIENT_2', 'FU_PATIENT_44', 'FU_PATIENT_45']
