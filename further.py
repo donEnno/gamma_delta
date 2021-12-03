@@ -1,37 +1,3 @@
-"""
-
-- Ähnlichkeit der Doppelten
-
-Modelle:
-- B45, B62, PAM beste Modelle
-	+ absolut vs relativ
-	+ freq Modelle
-
-	- hierfür 4 Varianten
-		+ Wie verteilen sich diedoppelten Patienten im Clustering?
-		+ Häufigkeiten der Doppelten über die Cluster
-
-Erst nach den vier Varianten:
-- BL vs HD (für die 3)
-
-- Response
-
-- Regression der PFS/OS
-
-Wichtigkeit: OS -> PFS -> Response
-
-@sig. Cluster
-- Eigenschaften der Cluster:
-	+ unique Seq
-	+ Patienten
-	+ Delta-Ketten
-
-- BL vs FU (matching)
-
-- gemeinsame Sequenzen
-
-
-"""
 import resource
 
 import networkit
@@ -40,11 +6,13 @@ import pandas as pd
 import os
 import errno
 import joblib
-from sklearn.model_selection import StratifiedKFold, GridSearchCV, RepeatedStratifiedKFold
-from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
-from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.feature_selection import RFECV, RFE
+
+# from sklearn.model_selection import StratifiedKFold, GridSearchCV, RepeatedStratifiedKFold
+# from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
+# from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
+# from sklearn.model_selection import train_test_split, cross_val_score
+# from sklearn.feature_selection import RFECV, RF# E
+
 
 # from pipeline import Data
 
@@ -53,17 +21,18 @@ from sklearn.feature_selection import RFECV, RFE
 # # # # # # # # #
 
 
-def morisita_horn(X: list, Y: list, S: list):
+
+def morisita_horn(x, y, s):
     z = 0
     n = 0
     m = 0
-    x = len(X)
-    y = len(Y)
-    for unique_sequence in S:
-        z = z + X.count(unique_sequence) * Y.count(unique_sequence)
-        n = n + X.count(unique_sequence) ** 2
-        m = m + Y.count(unique_sequence) ** 2
-    C = 2 * z / (((n / x ** 2) + (m / y ** 2)) * x * y)
+    x_len = len(x)
+    y_len = len(y)
+    for unique_sequence in s:
+        z = z + x.count(unique_sequence) * y.count(unique_sequence)
+        n = n + x.count(unique_sequence) ** 2
+        m = m + y.count(unique_sequence) ** 2
+    C = 2 * z / (((n / x_len ** 2) + (m / y_len ** 2)) * x_len * y_len)
     return C
 
 
@@ -131,7 +100,9 @@ def double_sorted_overlaps():
 # C O M P A R E M O D E L S #
 # # # # # # # # # # # # # # #
 
-def check_eCRF(path_to_txt, kind='BL', print_out=True):
+
+def parse_all_sequences():
+
     with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
         lines = file.readlines()
 
@@ -142,6 +113,12 @@ def check_eCRF(path_to_txt, kind='BL', print_out=True):
             headers.append(line)
         else:
             seq.append(line)
+
+    return np.array(headers), np.array(seq)
+
+
+def check_ecrf(path_to_txt, kind='BL', print_out=True):
+    headers, seq = parse_all_sequences()
 
     seq = list(zip(headers, seq))
     seq = [(h.strip(), s.strip()) for h, s in seq]
@@ -176,8 +153,6 @@ def reduce_dm(patient, dm_filename):
     :param dm_filename:
     :return:
     """
-    with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
-        lines = file.readlines()
 
     dm_path = dm_root + dm_filename
     if os.path.isfile(dm_path):
@@ -205,18 +180,10 @@ def get_patient_indices(patient: str):
     if not patient.endswith('_'):
         patient = patient + '_'
 
-    with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
-        lines = file.readlines()
-
-    headers = []
-    seq = []
-    for line in lines:
-        if line.startswith('>'):
-            headers.append(line)
-        else:
-            seq.append(line)
+    headers, seq = parse_all_sequences()
 
     ixs = [ix for ix, header in enumerate(headers) if patient in header]
+
     return ixs
 
 # # # # # # # # # # # # # # # #
@@ -225,11 +192,18 @@ def get_patient_indices(patient: str):
 
 
 class Classification:
-    def __init__(self, dm: np.array, sm: str, gp: tuple):
-        # fundamentals
+
+    def __init__(self, dm: np.array, sm: str, gp: tuple,
+                 bl: list, fu: list, hd: list):
+        # basics
         self.distance_matrix = dm
         self.substitution_matrix = sm
         self.gap_penalties = gp
+        # patient data - (df, eCRF, ID)
+        self.bl = bl
+        self.fu = fu
+        self.hd = hd
+
         # louvain
         self.graph = []
         self.clusters = []
@@ -240,10 +214,9 @@ class Classification:
         self.positive_significant_feature = []
         self.negative_significant_feature = []
 
-    def dm_to_graph(self, dm):
+    def dm_to_graph(self):
         """
         Transforms the distance matrix dm into a graph g on which the Louvain method can be performed.
-        :param dm: distance matrix in lower triangular format
         """
 
         counter = 0
@@ -262,7 +235,8 @@ class Classification:
 
         self.graph = g
 
-    def louvain(self, graph, gammas):
+    def louvain(self, gammas):
+
         first_loop = True
         for g in gammas:
 
@@ -283,32 +257,54 @@ class Classification:
                 self.clusters.append(adjusted_cluster_vector)
 
     def build_feature_from_cluster(self):
-        def get_number_of_sequences_per_patient(self, patient_type):
-            list_of_num_seq = []
-            path_to_seqs_per_origin = fr'/home/ubuntu/Enno/gammaDelta/sequence_data/{patient_type}_fasta/'
 
-            self.number_of_patients = len(os.listdir(path_to_seqs_per_origin))
-            num_of_patients = range(1, self.number_of_patients + 1)
+        headers, seq = parse_all_sequences()
+        first_loop = True
 
-            for patient_number in num_of_patients:
-                file = fr'{path_to_seqs_per_origin}{patient_type}_PATIENT_{patient_number}.fasta'
-                list_of_num_seq.append(len([1 for line in open(file) if line.startswith(">")]))
+        for cluster in self.clusters:                                           # for every clustering
+            patient_ix = 0
 
-            return list_of_num_seq
+            for cohort in [self.bl, self.fu, self.hd]:                          # for every cohort
+                num_cluster = len(np.unique(cluster))
+                sequence_distribution = np.zeros(121, num_cluster)
+                sequences_per_cluster = [[] for _ in range(num_cluster)]
 
-        def count_frequency_for_one_patient(self, patient_list, aa_sequences, sequences_per_cluster):
-            # TODO Maybe use freq as increment instead of 1
+                for df, ecrf, tag in cohort:                                    # for every patient within cohort
+                    indices = get_patient_indices(tag)
+                    dic = dict(zip(np.unique(cluster), range(num_cluster)))
 
-            frequency = np.zeros(self.number_of_clusters)
+                    patient_sequences = seq[indices]
+                    patient_clusters = cluster[indices]
+                    adjusted_patient_clusters = [dic[i] for i in patient_clusters]
 
-            for aa, (s, c) in zip(aa_sequences, patient_list):
-                if frequency[c] == 0:
-                    frequency += 1
-                else:
-                    frequency[c] += 1
-                sequences_per_cluster[c].append(aa)
+                    for s, c in zip(patient_sequences, adjusted_patient_clusters):
+                        # TODO include freq
+                        sequence_distribution[patient_ix, c] += 1
+                        sequences_per_cluster[c].append(s)
 
-            return frequency, sequences_per_cluster
+                    patient_ix += 1
+
+            if first_loop:
+                feature_vector = sequence_distribution
+            else:
+                feature_vector = np.concatenate((feature_vector, sequence_distribution), axis=1)
+
+
+
+
+"""
+        # TODO for loop for each clustering
+        frequency = np.zeros(self.clusters[0])
+
+        for aa, (s, c) in zip(aa_sequences, patient_list):
+            if frequency[c] == 0:
+                frequency += 1
+            else:
+                frequency[c] += 1
+            sequences_per_cluster[c].append(aa)
+
+        return frequency, sequences_per_cluster
+
 
         def calculate_feature_vector(self, absolute_toggle=True):
             absolute = []
@@ -346,6 +342,7 @@ class Classification:
             else:
                 self.feature_vector = np.array(relative)
             self.sequences_per_cluster = sequences_per_cluster
+"""
 
 
 # TODO Classification w/ feature selection
@@ -376,9 +373,17 @@ if __name__ == '__main__':
     double_sorted_df = double_sorted_overlaps()
     print(double_sorted_df)
 
-    lo_bl_df = check_eCRF(data_bl, 'BL', print_out=False)       # (df, eCRF, ID)
-    lo_fu_df = check_eCRF(data_fu, 'FU', print_out=False)
-    lo_hd_df = check_eCRF(data_hd, 'HD', print_out=True)
+    # Init
+    obj = Classification(dm=joblib.load(dm_root+b45), sm='BLOSUM45', gp=(1, 0.1),
+                         bl=check_ecrf(data_bl, 'BL', print_out=False),
+                         fu=check_ecrf(data_fu, 'FU', print_out=False),
+                         hd=check_ecrf(data_hd, 'HD', print_out=False)
+                         )
+
+    obj.dm_to_graph()
+    obj.louvain([1.00, 1.05, 1.10, 1.15, 1.16, 1.17])
+    obj.build_feature_from_cluster()
+
 
     var_i = []
     var_ii = ['BL_PATIENT_1', 'BL_PATIENT_2', 'BL_PATIENT_49', 'BL_PATIENT_50', 'FU_PATIENT_1', 'FU_PATIENT_2', 'FU_PATIENT_44', 'FU_PATIENT_45']
