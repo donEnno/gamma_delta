@@ -276,6 +276,7 @@ class Data:
         return frequency, sequences_per_cluster
 
     def calculate_feature_vector(self, absolute_toggle=True):
+
         absolute = []
         relative = []
         num_of_seq_per_patient = []

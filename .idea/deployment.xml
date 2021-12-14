@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="ubuntu@193.196.29.162:22" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true" showExcludedInSync="true">
+    <serverData>
+      <paths name="ubuntu@193.196.29.162:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ubuntu/Enno/gammaDelta" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ubuntu@193.196.29.34:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ubuntu/Enno/gammaDelta" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="ubuntu@193.196.29.34:22 (1)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/ubuntu/Enno/gammaDelta" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

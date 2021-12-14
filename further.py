@@ -6,10 +6,13 @@ import pandas as pd
 import os
 import errno
 import joblib
-# from sklearn.model_selection import StratifiedKFold, GridSearchCV, RepeatedStratifiedKFold
-# from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
-# from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
-# from sklearn.model_selection import train_test_split, cross_val_score
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
+from sklearn.model_selection import StratifiedKFold, RepeatedStratifiedKFold
+from sklearn.feature_selection import RFE
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
 # from sklearn.feature_selection import RFECV, RF# E
 
 # from pipeline import Data
@@ -59,6 +62,8 @@ dm_root = '/home/ubuntu/Enno/mnt/volume/dm_in_use/'
 b45 = 'BLFUHD_BLOSUM45_1_0.1_DM'
 b62 = 'BLFUHD_BLOSUM62_10_0.5_DM'
 pam70 = 'BLFUHD_PAM70_1_0.1_DM'
+
+b45_gammas = [1.00, 1.05, 1.10, 1.15, 1.16, 1.17]
 
 # # # # # # # # # # # # # #
 # D O U B L E S O R T E D #
@@ -187,9 +192,12 @@ def get_patient_indices(patient: str):
 
 
 class Classification:
-    def __init__(self, dm: np.array, sm: str, gp: tuple,
+    def __init__(self, dm: np.array, sm: str, gp: tuple, n: int, n_healthy: int, n_sick: int,
                  bl: list, fu: list, hd: list):
         # basics
+        self.n_healthy = n_healthy
+        self.n_sick = n_sick
+        self.n = n
         self.distance_matrix = dm
         self.substitution_matrix = sm
         self.gap_penalties = gp
@@ -203,7 +211,7 @@ class Classification:
         self.clusters = []
         # logistic regression
         self.feature_vector = []
-        self.response = []
+        self.response = np.array(self.n_sick * [1] + self.n_healthy * [0]).T
         # downstream
         self.positive_significant_feature = []
         self.negative_significant_feature = []
@@ -262,7 +270,7 @@ class Classification:
             patient_ix = 0
 
             num_cluster = len(np.unique(cluster))
-            sequence_distribution = np.zeros((150, num_cluster))
+            sequence_distribution = np.zeros((self.n, num_cluster))
             sequences_per_cluster = [[] for _ in range(num_cluster)]
 
             for cohort in [self.bl, self.fu, self.hd]:  # for every cohort
@@ -297,8 +305,81 @@ class Classification:
         if kind == 'relative':
             self.feature_vector = self.feature_vector / self.feature_vector.sum(axis=0)
 
+    def filter_colinearity(self):
+        corr = np.corrcoef(self.feature_vector, rowvar=False)
+        w, v = np.linalg.eig(corr)
 
-# TODO Classification w/ feature selection
+        n, m = self.feature_vector.shape
+
+        for ix, eigen_value in enumerate(w):
+            if eigen_value < 0.01:
+                self.feature_vector = np.delete(self.feature_vector, ix, axis=1)
+
+        j, k = self.feature_vector.shape
+        print(str(m - k), ' features were colinear and thus deleted.')
+
+    def select_features(self, upper):
+        models = dict()
+        for i in range(8, upper):
+            rfe = RFE(estimator=LogisticRegression(max_iter=500000, C=10000000), n_features_to_select=i)
+            model = LogisticRegression(max_iter=500000, C=10000000)
+            models[str(i)] = Pipeline(steps=[('s', rfe), ('m', model)])
+
+        results, names = [], []
+        for name, model in models.items():
+            cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=42)
+            scores = cross_val_score(model, self.feature_vector, self.response, scoring='balanced_accuracy', cv=cv,
+                                     n_jobs=-1, error_score='raise')
+            results.append(scores)
+            names.append(name)
+            print('>%s %.3f (%.3f)' % (name, np.mean(scores), np.std(scores)))
+
+        plt.boxplot(results, labels=names, showmeans=True)
+        plt.ylabel('Cross validation score (balanced accuracy)')
+        plt.xlabel('Number of features selected')
+        plt.title(
+            'Feature selection ' + self.substitution_matrix + ' ' + str(self.gap_penalties))
+        plt.show()
+
+        # ix = highest scoring index
+        max_score = 0
+        max_name = ''
+        for score, name in zip(scores, names):
+            if score > max_score:
+                max_score = score
+                max_name = name
+        ix = max_name
+
+        rfe = models[ix][0]
+        rfe.fit(self.feature_vector, self.response)
+        mask = rfe.get_support(indices=True)
+        self.feature_vector = rfe.transform(self.feature_vector)
+        # self.reduced_sequences = [self.reduced_sequences[ix] for ix in mask]
+        # self.tracing = [self.tracing[ix] for ix in mask]
+
+    def make_classification(self, reducer=False):
+        self.model = LogisticRegressionCV(max_iter=50000)
+        self.model_f = self.model.fit(X=self.feature_vector, y=self.response)
+
+        if reducer:
+            self.select_features(21)
+
+        cv_sensitivity_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='recall')))
+        # cv_specificity_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='specificity')))
+        cv_roauc_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='roc_auc')))
+        cv_balanced_acc_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='balanced_accuracy')))
+        cv_f1_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='f1')))
+        cv_precision_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='precision')))
+
+        print('Sensitivity: \t %.3f' % cv_sensitivity_score)
+        # print('Specificity: \t %.3f' % cv_specificity_score)
+        print('ROAUC: \t %.3f' % cv_roauc_score)
+
+        print('F1: \t %.3f' % cv_f1_score)
+        print('Precision: \t %.3f' % cv_precision_score)
+        print('Bal. Accuracy: \t %.3f' % cv_balanced_acc_score)
+
+
 # TODO Wald test
 # TODO feature analysis
 # TODO UMAP embedding
@@ -325,23 +406,42 @@ if __name__ == '__main__':
     print(double_sorted_df)
 
     # Init
-    obj = Classification(dm=joblib.load(dm_root+b45), sm='BLOSUM45', gp=(1, 0.1),
+    obj = Classification(dm=joblib.load(dm_root+b45), sm='BLOSUM45', gp=(1, 0.1), n=150,
                          bl=check_ecrf(data_bl, 'BL', print_out=False),
                          fu=check_ecrf(data_fu, 'FU', print_out=False),
-                         hd=check_ecrf(data_hd, 'HD', print_out=False)
-                         )
+                         hd=check_ecrf(data_hd, 'HD', print_out=False),
+                         n_healthy=29,
+                         n_sick=121)
 
     obj.dm_to_graph()
-    obj.louvain([1.00, 1.05, 1.10, 1.15, 1.16, 1.17])
+    obj.louvain(b45_gammas)
 
+    print('ABSOLUTE')
     obj.build_feature_from_cluster(kind='absolute')
-    print(obj.feature_vector)
+    print(obj.feature_vector.shape)
+    obj.make_classification()
 
+    print('RELATIVE')
     obj.build_feature_from_cluster(kind='relative')
-    print(obj.feature_vector)
+    print(obj.feature_vector.shape)
+    obj.make_classification()
 
+    print('FREQ')
     obj.build_feature_from_cluster(kind='freq')
-    print(obj.feature_vector)
+    print(obj.feature_vector.shape)
+    obj.make_classification()
+
+    print('ABSOLUTE')
+    obj.build_feature_from_cluster(kind='absolute')
+    obj.make_classification(reducer=True)
+
+    print('RELATIVE')
+    obj.build_feature_from_cluster(kind='relative')
+    obj.make_classification(reducer=True)
+
+    print('ABSOLUTE')
+    obj.build_feature_from_cluster(kind='freq')
+    obj.make_classification(reducer=True)
 
 
     var_i = []
@@ -351,3 +451,9 @@ if __name__ == '__main__':
 
     DM = reduce_dm(var_ii, b45)
     print(DM.shape)
+
+"""
+self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.feature_vector, self.response,
+                                                                                test_size=split, stratify=self.response,
+                                                                                random_state=rnd_state)
+"""
