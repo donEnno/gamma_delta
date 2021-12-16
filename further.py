@@ -7,15 +7,15 @@ import os
 import joblib
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
-from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold, cross_val_score
 from sklearn.feature_selection import RFE
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import cross_val_score
+from scipy.stats import norm
+
 
 # # # # # # # # #
 # M E T H O D S #
 # # # # # # # # #
-
 
 def morisita_horn(x, y, s):
     z = 0
@@ -92,14 +92,11 @@ def double_sorted_overlaps():
 
     return temp_df
 
-# # # # # # # # # # # # # # # #
-# C L A S S I F I C A T I O N #
-# # # # # # # # # # # # # # # #
-
 
 class Classification:
     def __init__(self, dm: np.array, sm: str, gp: tuple, n: int, n_healthy: int, n_sick: int):
         # basics
+        self.patients = None
         self.n_healthy = n_healthy
         self.n_sick = n_sick
         self.n = n
@@ -108,6 +105,8 @@ class Classification:
         self.gap_penalties = gp
         self.headers = []
         self.sequences = []
+        self.reduced_sequence_clusters = []
+        self.flat_sequences_per_cluster = None
         # patient data - (df, eCRF, ID)
         self.bl = []
         self.fu = []
@@ -126,6 +125,8 @@ class Classification:
         # downstream
         self.positive_significant_feature = []
         self.negative_significant_feature = []
+        self.positive_tracing = []
+        self.negative_tracing = []
 
     def parse_all_sequences(self):
         with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
@@ -217,9 +218,15 @@ class Classification:
             self.distance_matrix = np.delete(self.distance_matrix, indices, axis=0)
             self.distance_matrix = np.delete(self.distance_matrix, indices, axis=1)
 
+            self.headers = np.delete(self.headers, indices)
+            self.sequences = np.delete(self.sequences, indices)
+
+            self.patients = [(df, ecrf, identifier) for df, ecrf, identifier in self.patients if identifier != p]
+
     def louvain(self, gammas):
         first_loop = True
         increment = 0
+        self.clusters = []
         for g in gammas:
 
             cluster = networkit.community.detectCommunities(self.graph,
@@ -240,6 +247,7 @@ class Classification:
                 self.clusters.append(adjusted_cluster_vector)
 
     def build_feature_from_cluster(self, kind='absolute'):
+        self.sequences_per_cluster = []
 
         if kind not in ['absolute', 'relative', 'freq']:
             raise ValueError('\'kind\' has to be either \'absolute\', \'relative\' or \'freq\'')
@@ -254,27 +262,29 @@ class Classification:
             sequence_distribution = np.zeros((self.n, num_cluster))
             sequences_per_clustering = [[] for _ in range(num_cluster)]
 
-            for cohort in [self.bl, self.fu, self.hd]:  # for every cohort
+            for df, ecrf, tag in self.patients:  # for every cohort
 
-                for df, ecrf, tag in cohort:  # for every patient within cohort
-                    indices = self.get_patient_indices(tag)
-                    dic = dict(zip(np.unique(cluster), range(num_cluster)))
+                indices = self.get_patient_indices(tag)
+                dic = dict(zip(np.unique(cluster), range(num_cluster)))
 
-                    patient_sequences = np.array(df['cdr3aa'].to_list())
-                    patient_frequencies = np.array(df['freq'].to_list())
+                patient_sequences = np.array(df['cdr3aa'].to_list())
+                patient_frequencies = np.array(df['freq'].to_list())
 
-                    patient_clusters = cluster[indices]
-                    adjusted_patient_cluster = [dic[i] for i in patient_clusters]
+                patient_clusters = cluster[indices]
+                adjusted_patient_cluster = [dic[i] for i in patient_clusters]
 
-                    for s, c, f in zip(patient_sequences, adjusted_patient_cluster, patient_frequencies):
-                        if kind == 'relative' or kind == 'absolute':
-                            sequence_distribution[patient_ix, c] += 1
-                        if kind == 'freq':
-                            sequence_distribution[patient_ix, c] += f
+                print(len(patient_sequences) == len(adjusted_patient_cluster))
+                print(len(adjusted_patient_cluster) == len(patient_frequencies))
 
-                        sequences_per_clustering[c].append(s)
+                for s, c, f in zip(patient_sequences, adjusted_patient_cluster, patient_frequencies):
+                    if kind == 'relative' or kind == 'absolute':
+                        sequence_distribution[patient_ix, c] += 1
+                    if kind == 'freq':
+                        sequence_distribution[patient_ix, c] += f
 
-                    patient_ix += 1
+                    sequences_per_clustering[c].append(s)
+
+                patient_ix += 1
             self.sequences_per_cluster.append(sequences_per_clustering)
 
             if first_loop:
@@ -286,16 +296,18 @@ class Classification:
         if kind == 'relative':
             self.feature_vector = self.feature_vector / self.feature_vector.sum(axis=0)
 
+        self.flat_sequences_per_cluster = [cluster for clustering in self.sequences_per_cluster for cluster in clustering]
+
     def filter_colinearity(self):
         corr = np.corrcoef(self.feature_vector, rowvar=False)
         w, v = np.linalg.eig(corr)
 
         n, m = self.feature_vector.shape
-
+        del_ix = []
         for ix, eigen_value in enumerate(w):
             if eigen_value < 0.01:
                 self.feature_vector = np.delete(self.feature_vector, ix, axis=1)
-
+                del_ix.append(ix)
         j, k = self.feature_vector.shape
         print(str(m - k), ' features were colinear and thus deleted.')
 
@@ -315,12 +327,12 @@ class Classification:
             names.append(name)
             print('>%s %.3f (%.3f)' % (name, np.mean(scores), np.std(scores)))
 
-        plt.boxplot(results, labels=names, showmeans=True)
-        plt.ylabel('Cross validation score (balanced accuracy)')
-        plt.xlabel('Number of features selected')
-        plt.title(
-            'Feature selection ' + self.substitution_matrix + ' ' + str(self.gap_penalties))
-        plt.show()
+        # plt.boxplot(results, labels=names, showmeans=True)
+        # plt.ylabel('Cross validation score (balanced accuracy)')
+        # plt.xlabel('Number of features selected')
+        # plt.title(
+        #     'Feature selection ' + self.substitution_matrix + ' ' + str(self.gap_penalties))
+        # plt.show()
 
         # ix = highest scoring index
         max_score = 0
@@ -334,9 +346,11 @@ class Classification:
         rfe = models[ix][0]
         rfe.fit(self.feature_vector, self.response)
         mask = rfe.get_support(indices=True)
+        self.reduced_sequence_clusters = []
 
-        for ix in mask:
-            for clustering_ix, clustering in enumerate(self.clusters):
+        for ix in mask:     # for every cluster to select (index)
+            self.reduced_sequence_clusters.append(self.flat_sequences_per_cluster[ix])
+            for clustering_ix, clustering in enumerate(self.clusters):  # for every index, cluster in clusterings
                 if ix in clustering:
                     temp = []
 
@@ -351,15 +365,14 @@ class Classification:
                     continue
 
         self.feature_vector = rfe.transform(self.feature_vector)
-        # self.reduced_sequences = [self.reduced_sequences[ix] for ix in mask]
-        # self.tracing = [self.tracing[ix] for ix in mask]
 
     def make_classification(self, reducer=False):
         self.model = LogisticRegressionCV(max_iter=50000)
-        self.model_f = self.model.fit(X=self.feature_vector, y=self.response)
 
         if reducer:
             self.select_features(21)
+
+        self.model_f = self.model.fit(X=self.feature_vector, y=self.response)
 
         cv_sensitivity_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='recall')))
         # cv_specificity_score = np.average(np.array(cross_val_score(self.model, self.feature_vector, self.response, cv=5, scoring='specificity')))
@@ -376,7 +389,50 @@ class Classification:
         print('Precision: \t %.3f' % cv_precision_score)
         print('Bal. Accuracy: \t %.3f' % cv_balanced_acc_score)
 
-# TODO Wald test
+    def wald_test(self, model, x):
+        """ Calculate z-scores for scikit-learn LogisticRegression.
+        parameters:
+            model: fitted sklearn.linear_model.LogisticRegression with intercept and large C
+            x:     matrix on which the model was fit
+        This function uses asymtptics for maximum likelihood estimates.
+        """
+        p = model.predict_proba(x)
+        n = len(p)
+        m = len(model.coef_[0]) + 1
+        coefs = np.concatenate([model.intercept_, model.coef_[0]])
+        x_full = np.matrix(np.insert(np.array(x), 0, 1, axis=1))
+        ans = np.zeros((m, m))
+
+        for i in range(n):
+            ans = ans + np.dot(np.transpose(x_full[i, :]), x_full[i, :]) * p[i, 1] * p[i, 0]
+
+        vcov = np.linalg.inv(np.matrix(ans))
+        se = np.sqrt(np.diag(vcov))
+
+        t = coefs / se  # t values
+        p = (1 - norm.cdf(abs(t))) * 2
+        beta = self.model_f.coef_[0]
+
+        print(len(beta) == len(p))
+        print(len(beta) == len(self.reduced_sequence_clusters))
+
+        beta_p = list(zip(p[1:], beta, self.reduced_sequence_clusters))
+
+        self.positive_significant_feature = []
+        self.negative_significant_feature = []
+        self.positive_tracing = []
+        self.negative_tracing = []
+
+        for ix, (p, feature, seq) in enumerate(beta_p):
+            if p < 0.05:
+                if feature > 0:
+                    self.positive_significant_feature.append(seq)
+                    self.positive_tracing.append(self.tracing[ix])
+                else:
+                    self.negative_significant_feature.append(seq)
+                    self.negative_tracing.append(self.tracing[ix])
+
+
 # TODO feature analysis
 # TODO UMAP embedding
 
@@ -411,6 +467,7 @@ if __name__ == '__main__':
     obj.bl = obj.check_ecrf(data_bl, 'BL', print_out=False)
     obj.fu = obj.check_ecrf(data_fu, 'FU', print_out=False)
     obj.hd = obj.check_ecrf(data_hd, 'HD', print_out=False)
+    obj.patients = obj.bl + obj.fu + obj.hd
 
     obj.dm_to_graph()
     obj.louvain(b45_gammas)
