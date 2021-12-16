@@ -4,18 +4,13 @@ import networkit
 import numpy as np
 import pandas as pd
 import os
-import errno
 import joblib
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
-from sklearn.model_selection import StratifiedKFold, RepeatedStratifiedKFold
+from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.feature_selection import RFE
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score, log_loss, matthews_corrcoef
-# from sklearn.feature_selection import RFECV, RF# E
-
-# from pipeline import Data
+from sklearn.model_selection import cross_val_score
 
 # # # # # # # # #
 # M E T H O D S #
@@ -97,103 +92,13 @@ def double_sorted_overlaps():
 
     return temp_df
 
-
-# # # # # # # # # # # # # # #
-# C O M P A R E M O D E L S #
-# # # # # # # # # # # # # # #
-
-def parse_all_sequences():
-    with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
-        lines = file.readlines()
-
-    headers = []
-    seq = []
-    for line in lines:
-        if line.startswith('>'):
-            headers.append(line)
-        else:
-            seq.append(line.strip())
-
-    return np.array(headers), np.array(seq)
-
-
-def check_ecrf(path_to_txt, kind='BL', print_out=True):
-    headers, seq = parse_all_sequences()
-
-    seq = list(zip(headers, seq))
-    seq = [(h.strip(), s.strip()) for h, s in seq]
-
-    lo_files = os.listdir(path_to_txt)
-    lo_files.sort()
-
-    lo_patient_df = []
-    for ix, p in enumerate(lo_files):
-        if p.startswith('C'):
-            ecrf = p[16:20]
-        else:
-            ecrf = p[10:14]
-        patient = '{}_PATIENT_{}'.format(kind, (ix + 1))
-        lo_patient_df.append((pd.read_csv(path_to_txt + p, sep='\t'), ecrf, patient))
-
-    for df, eCRF, patient in lo_patient_df:
-        ixs = get_patient_indices(patient)
-        if list(np.array(seq)[ixs][:, 1]) == df['cdr3aa'].to_list():
-            if print_out:
-                print(patient + ' - ' + eCRF)
-        else:
-            raise AssertionError('Incompatible eCRF')
-
-    return lo_patient_df
-
-
-def reduce_dm(patient, dm_filename):
-    """
-    Remove patient from the dm and return the updated dm.
-    :param patient:
-    :param dm_filename:
-    :return:
-    """
-
-    dm_path = dm_root + dm_filename
-    if os.path.isfile(dm_path):
-        dm = joblib.load(dm_path)
-    else:
-        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), dm_root+b45)
-
-    for p in patient:
-        patient = p + '_'
-        indices = get_patient_indices(patient)
-
-        # np.delete(matrix, ix, axis: 0 = rows, 1 = columns)
-        dm = np.delete(dm, indices, axis=0)
-        dm = np.delete(dm, indices, axis=1)
-
-    return dm
-
-
-def get_patient_indices(patient: str):
-    """
-    Determines all sequence indices for a single patient.
-    :param patient: patient
-    :return:
-    """
-    if not patient.endswith('_'):
-        patient = patient + '_'
-
-    headers, seq = parse_all_sequences()
-
-    ixs = [ix for ix, header in enumerate(headers) if patient in header]
-
-    return ixs
-
 # # # # # # # # # # # # # # # #
 # C L A S S I F I C A T I O N #
 # # # # # # # # # # # # # # # #
 
 
 class Classification:
-    def __init__(self, dm: np.array, sm: str, gp: tuple, n: int, n_healthy: int, n_sick: int,
-                 bl: list, fu: list, hd: list):
+    def __init__(self, dm: np.array, sm: str, gp: tuple, n: int, n_healthy: int, n_sick: int):
         # basics
         self.n_healthy = n_healthy
         self.n_sick = n_sick
@@ -201,20 +106,80 @@ class Classification:
         self.distance_matrix = dm
         self.substitution_matrix = sm
         self.gap_penalties = gp
+        self.headers = []
+        self.sequences = []
         # patient data - (df, eCRF, ID)
-        self.bl = bl
-        self.fu = fu
-        self.hd = hd
+        self.bl = []
+        self.fu = []
+        self.hd = []
 
         # louvain
         self.graph = []
         self.clusters = []
+        self.sequences_per_cluster = []
+        self.tracing = []
         # logistic regression
+        self.model = []
+        self.model_f = []
         self.feature_vector = []
         self.response = np.array(self.n_sick * [1] + self.n_healthy * [0]).T
         # downstream
         self.positive_significant_feature = []
         self.negative_significant_feature = []
+
+    def parse_all_sequences(self):
+        with open('BLFUHD_ALL_SEQUENCES.fasta', 'r') as file:
+            lines = file.readlines()
+
+        headers = []
+        seq = []
+        for line in lines:
+            if line.startswith('>'):
+                headers.append(line)
+            else:
+                seq.append(line.strip())
+
+        self.headers, self.sequences = np.array(headers), np.array(seq)
+
+    def check_ecrf(self, path_to_txt, kind='BL', print_out=True):
+
+        seq = list(zip(self.headers, self.sequences))
+        seq = [(h.strip(), s.strip()) for h, s in seq]
+
+        lo_files = os.listdir(path_to_txt)
+        lo_files.sort()
+
+        lo_patient_df = []
+        for ix, p in enumerate(lo_files):
+            if p.startswith('C'):
+                ecrf = p[16:20]
+            else:
+                ecrf = p[10:14]
+            patient = '{}_PATIENT_{}'.format(kind, (ix + 1))
+            lo_patient_df.append((pd.read_csv(path_to_txt + p, sep='\t'), ecrf, patient))
+
+        for df, eCRF, patient in lo_patient_df:
+            ixs = self.get_patient_indices(patient)
+            if list(np.array(seq)[ixs][:, 1]) == df['cdr3aa'].to_list():
+                if print_out:
+                    print(patient + ' - ' + eCRF)
+            else:
+                raise AssertionError('Incompatible eCRF')
+
+        return lo_patient_df
+
+    def get_patient_indices(self, patient: str):
+        """
+        Determines all sequence indices for a single patient.
+        :param patient: patient
+        :return:
+        """
+        if not patient.endswith('_'):
+            patient = patient + '_'
+
+        ixs = [ix for ix, header in enumerate(self.headers) if patient in header]
+
+        return ixs
 
     def dm_to_graph(self):
         """
@@ -237,8 +202,24 @@ class Classification:
 
         self.graph = g
 
+    def reduce_dm(self, patient):
+        """
+        Remove patient from the dm and return the updated dm.
+        :param patient:
+        :return:
+        """
+
+        for p in patient:
+            patient = p + '_'
+            indices = self.get_patient_indices(patient)
+
+            # np.delete(matrix, ix, axis: 0 = rows, 1 = columns)
+            self.distance_matrix = np.delete(self.distance_matrix, indices, axis=0)
+            self.distance_matrix = np.delete(self.distance_matrix, indices, axis=1)
+
     def louvain(self, gammas):
         first_loop = True
+        increment = 0
         for g in gammas:
 
             cluster = networkit.community.detectCommunities(self.graph,
@@ -252,9 +233,10 @@ class Classification:
             if first_loop:
                 self.clusters.append(cluster_vector)
                 first_loop = False
+                increment += len(np.unique(cluster_vector))
             else:
-                increment = len(np.unique(cluster_vector))
                 adjusted_cluster_vector = [x+increment for x in cluster_vector]
+                increment += len(np.unique(cluster_vector))
                 self.clusters.append(adjusted_cluster_vector)
 
     def build_feature_from_cluster(self, kind='absolute'):
@@ -262,7 +244,6 @@ class Classification:
         if kind not in ['absolute', 'relative', 'freq']:
             raise ValueError('\'kind\' has to be either \'absolute\', \'relative\' or \'freq\'')
 
-        sequences_per_clustering = []
         first_loop = True
 
         for cluster in self.clusters:  # for every clustering
@@ -271,12 +252,12 @@ class Classification:
 
             num_cluster = len(np.unique(cluster))
             sequence_distribution = np.zeros((self.n, num_cluster))
-            sequences_per_cluster = [[] for _ in range(num_cluster)]
+            sequences_per_clustering = [[] for _ in range(num_cluster)]
 
             for cohort in [self.bl, self.fu, self.hd]:  # for every cohort
 
                 for df, ecrf, tag in cohort:  # for every patient within cohort
-                    indices = get_patient_indices(tag)
+                    indices = self.get_patient_indices(tag)
                     dic = dict(zip(np.unique(cluster), range(num_cluster)))
 
                     patient_sequences = np.array(df['cdr3aa'].to_list())
@@ -291,10 +272,10 @@ class Classification:
                         if kind == 'freq':
                             sequence_distribution[patient_ix, c] += f
 
-                        sequences_per_cluster[c].append(s)
+                        sequences_per_clustering[c].append(s)
 
                     patient_ix += 1
-                sequences_per_clustering.append(sequences_per_cluster)
+            self.sequences_per_cluster.append(sequences_per_clustering)
 
             if first_loop:
                 self.feature_vector = sequence_distribution
@@ -330,7 +311,7 @@ class Classification:
             cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=42)
             scores = cross_val_score(model, self.feature_vector, self.response, scoring='balanced_accuracy', cv=cv,
                                      n_jobs=-1, error_score='raise')
-            results.append(scores)
+            results.append(np.mean(scores))
             names.append(name)
             print('>%s %.3f (%.3f)' % (name, np.mean(scores), np.std(scores)))
 
@@ -344,7 +325,7 @@ class Classification:
         # ix = highest scoring index
         max_score = 0
         max_name = ''
-        for score, name in zip(scores, names):
+        for score, name in zip(results, names):
             if score > max_score:
                 max_score = score
                 max_name = name
@@ -353,6 +334,22 @@ class Classification:
         rfe = models[ix][0]
         rfe.fit(self.feature_vector, self.response)
         mask = rfe.get_support(indices=True)
+
+        for ix in mask:
+            for clustering_ix, clustering in enumerate(self.clusters):
+                if ix in clustering:
+                    temp = []
+
+                    for sequence in clustering:
+                        if sequence == ix:
+                            temp.append(1)
+                        else:
+                            temp.append(0)
+                    self.tracing.append(temp)
+                    break
+                else:
+                    continue
+
         self.feature_vector = rfe.transform(self.feature_vector)
         # self.reduced_sequences = [self.reduced_sequences[ix] for ix in mask]
         # self.tracing = [self.tracing[ix] for ix in mask]
@@ -378,7 +375,6 @@ class Classification:
         print('F1: \t %.3f' % cv_f1_score)
         print('Precision: \t %.3f' % cv_precision_score)
         print('Bal. Accuracy: \t %.3f' % cv_balanced_acc_score)
-
 
 # TODO Wald test
 # TODO feature analysis
@@ -407,28 +403,28 @@ if __name__ == '__main__':
 
     # Init
     obj = Classification(dm=joblib.load(dm_root+b45), sm='BLOSUM45', gp=(1, 0.1), n=150,
-                         bl=check_ecrf(data_bl, 'BL', print_out=False),
-                         fu=check_ecrf(data_fu, 'FU', print_out=False),
-                         hd=check_ecrf(data_hd, 'HD', print_out=False),
                          n_healthy=29,
                          n_sick=121)
+
+    obj.parse_all_sequences()
+
+    obj.bl = obj.check_ecrf(data_bl, 'BL', print_out=False)
+    obj.fu = obj.check_ecrf(data_fu, 'FU', print_out=False)
+    obj.hd = obj.check_ecrf(data_hd, 'HD', print_out=False)
 
     obj.dm_to_graph()
     obj.louvain(b45_gammas)
 
     print('ABSOLUTE')
     obj.build_feature_from_cluster(kind='absolute')
-    print(obj.feature_vector.shape)
     obj.make_classification()
 
     print('RELATIVE')
     obj.build_feature_from_cluster(kind='relative')
-    print(obj.feature_vector.shape)
     obj.make_classification()
 
     print('FREQ')
     obj.build_feature_from_cluster(kind='freq')
-    print(obj.feature_vector.shape)
     obj.make_classification()
 
     print('ABSOLUTE')
@@ -439,18 +435,14 @@ if __name__ == '__main__':
     obj.build_feature_from_cluster(kind='relative')
     obj.make_classification(reducer=True)
 
-    print('ABSOLUTE')
+    print('FREQ')
     obj.build_feature_from_cluster(kind='freq')
     obj.make_classification(reducer=True)
-
 
     var_i = []
     var_ii = ['BL_PATIENT_1', 'BL_PATIENT_2', 'BL_PATIENT_49', 'BL_PATIENT_50', 'FU_PATIENT_1', 'FU_PATIENT_2', 'FU_PATIENT_44', 'FU_PATIENT_45']
     var_iii = ['BL_PATIENT_49', 'FU_PATIENT_44', 'BL_PATIENT_50', 'FU_PATIENT_45']
     var_iv = ['BL_PATIENT_1', 'BL_PATIENT_2', 'FU_PATIENT_1', 'FU_PATIENT_2']
-
-    DM = reduce_dm(var_ii, b45)
-    print(DM.shape)
 
 """
 self.train_x, self.test_x, self.train_y, self.test_y = train_test_split(self.feature_vector, self.response,
