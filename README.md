@@ -26,3 +26,11 @@ Wichtigkeit: OS -> PFS -> Response
 ## Misc
 - BL vs FU: Matching gemeinsamer Sequenzen
 - MART-1 Sequenzen 
+
+## Fragen
+@Matthias:
+- Wald Test und Coefficient Sign: LogisticRegressionCV(cv=5) vs. LogisticRegression auf 5 Fold und dann mitteln?
+
+@Kilian & Nicola:
+- Welche Patienten?
+- Min. Size von Clustern -> Filtern?
