@@ -3,10 +3,10 @@
 ### Anstehend
 - ~~Ähnlichkeit der doppelt gesorteten Patienten bestimmen~~
 - ~~Mapping der Patienten und eCRF Nummern~~
-- Modelle für alle vier Kombinationen der doppelt gesorteten (ds) Patienten generieren
-  - absolute Häufigkeiten
-  - relative Häufigkeiten
-  - _freq_ als Zählmaß
+- ~~Modelle für alle vier Kombinationen der doppelt gesorteten (ds) Patienten generieren~~
+  - ~~absolute Häufigkeiten~~
+  - ~~relative Häufigkeiten~~
+  - ~~_freq_ als Zählmaß~~
   - Wie verteilen sich die ds Patienten auf die Cluster?
   
 **Auswahl der ds Patienten in Rücksprache mit Nicola und Kilian**
