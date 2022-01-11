@@ -30,6 +30,7 @@ Wichtigkeit: OS -> PFS -> Response
 ## Fragen
 @Matthias:
 - Wald Test und Coefficient Sign: LogisticRegressionCV(cv=5) vs. LogisticRegression auf 5 Fold und dann mitteln?
+- Thresholding on the graph construction from the DM
 
 @Kilian & Nicola:
 - Welche Patienten?
