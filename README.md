@@ -26,6 +26,10 @@ Wichtigkeit: OS -> PFS -> Response
 ## Misc
 - BL vs FU: Matching gemeinsamer Sequenzen
 - MART-1 Sequenzen 
+- Kern der Kohorten bestimmen (MHI / Overlap / Shannon (Ravens et al))
+- Readcounts als Zählmaß
+- Gewichteter Similaritätsscore/MHI, Readcounts
+
 
 ## Fragen
 @Matthias:
