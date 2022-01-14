@@ -1,5 +1,7 @@
 # _gdTCR-MOCCA_
 
+** 21.01. kommt Regierungspräsidium **
+
 ### Anstehend
 - ~~Ähnlichkeit der doppelt gesorteten Patienten bestimmen~~
 - ~~Mapping der Patienten und eCRF Nummern~~
@@ -7,13 +9,17 @@
   - ~~absolute Häufigkeiten~~
   - ~~relative Häufigkeiten~~
   - ~~_freq_ als Zählmaß~~
-  - Wie verteilen sich die ds Patienten auf die Cluster?
+  - ~~Wie verteilen sich die ds Patienten auf die Cluster?~~
+  - Literaturrecherche: Gewichteter Similaritätsscore/MHI, Readcounts
+  - Antwort aus Hannover abwarten ▶️ Entscheidung über ds Patienten
   
-**Auswahl der ds Patienten in Rücksprache mit Nicola und Kilian**
-
-Für die Modelle BLOSUM45, BLOSUM62, PAM70:
+  
+### Testweise kann ausprobiert werden
 - Klassifikation der Response: BL vs HD
 - Regression der PFS/OS
+- Kern der Kohorten bestimmen (MHI / Overlap / Shannon (Ravens et al))
+- Readcounts als Zählmaß
+
 
 Wichtigkeit: OS -> PFS -> Response
 
@@ -26,10 +32,7 @@ Wichtigkeit: OS -> PFS -> Response
 ## Misc
 - BL vs FU: Matching gemeinsamer Sequenzen
 - MART-1 Sequenzen 
-- Kern der Kohorten bestimmen (MHI / Overlap / Shannon (Ravens et al))
-- Readcounts als Zählmaß
-- Gewichteter Similaritätsscore/MHI, Readcounts
-
+- 
 
 ## Fragen
 @Matthias:
