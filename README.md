@@ -28,6 +28,7 @@
 - ~~Logistic Regression~~
   - Grid Search für gamma
   - Klassenbestimmung (BL vs HD, BL vs FU, ...)
+- Cluster Analysen
 
 ### Literatur
 [Graph Adjacency Matrix](https://ieeexplore.ieee.org/document/8659769)
