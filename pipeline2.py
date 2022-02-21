@@ -1,6 +1,8 @@
 import copy
 import time
 import os
+
+import numexpr
 import numpy as np
 import pandas as pd
 import joblib
@@ -16,12 +18,12 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from scipy.spatial import KDTree
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
+from sklearn.metrics.cluster import adjusted_rand_score
 
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
 
 path_to_dm = 'D:/enno/2022/hiwi/data/dm/pam/BLFUHD_PAM70_10_0.5_DM'
 path_to_data = '/home/ubuntu/Enno/gammaDelta/patient_data/all/'
-path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
 
 
 dm_root = '/home/ubuntu/Enno/mnt/volume/dm_in_use/'
@@ -44,8 +46,8 @@ def write_fasta():
                 dummy_file.write(seq + '\n')
 
 
-def get_dm(name='dummy_dm', full=False):
-    dm = joblib.load(name)
+def get_dm(path='dummy_dm', full=False):
+    dm = joblib.load(path)
     if full:
         dm = (dm + dm.T)
 
@@ -77,6 +79,9 @@ def get_dm_train_test(df, dm):
     return train_df, train_dm, y_train, test_df, test_dm, y_test
 
 
+path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
+
+
 def get_fasta_info(file=path_to_fasta):
     fasta = list(SeqIO.parse(file, 'fasta'))
     index = [(p, seq_no) for [p, seq_no, f, c, v], seq in [(record.id.split('_'), str(record.seq)) for record in fasta]]
@@ -89,16 +94,18 @@ def get_fasta_info(file=path_to_fasta):
 
 
 def get_graph(dm):
-    timer = time.time()
+    t0 = time.time()
     m, _ = dm.shape
     g = networkit.Graph(m, weighted=True)
     mask_x, mask_y = np.mask_indices(m, np.tril, -1)
     masking_zip = zip(mask_x, mask_y, dm[mask_x, mask_y])
 
     for nodeA, nodeB, weight in masking_zip:
+        if weight == 0:
+            continue
         g.addEdge(nodeA, nodeB, weight)
 
-    print('This took %.3f s' % (time.time()-timer))
+    print('The graph construction took %.3f s' % (time.time()-t0))
 
     return g
 
@@ -109,16 +116,29 @@ def get_embedding(dm):
     return reducer
 
 
-def get_cluster(graph, gamma):
+def get_cluster(graph, gamma, kind):
+    if kind not in ['louvain', 'leiden', 'spectral']:
+        raise ValueError('\'kind\' has to be either \'louvain\', \'leiden\' or \'spectral\'')
+
     cluster = networkit.community.detectCommunities(graph,
                                                     algo=networkit.community.PLM(graph, refine=True, gamma=gamma))
     cluster.compact()
     cluster_vector = np.array(cluster.getVector())
-    clusters_ids = cluster.getSubsetIds()
-    print(clusters_ids)
-    print(list(clusters_ids))
+    clusters_ids = list(cluster.getSubsetIds())
 
-    return cluster_vector, clusters_ids
+    return cluster_vector, len(clusters_ids)
+
+
+def kNN_selection(dm, k_percent):
+    t0 = time.time()
+    knn_dm = copy.deepcopy(dm)
+    n, _ = dm.shape
+    k = int(n * k_percent)
+    top_ixs = np.argpartition(dm, k)[:, :k]
+    rows = np.arange(n)[:, None]
+    knn_dm[rows, top_ixs] = 0
+    print('kNN_selection for k_percent = {} took {:.2f}s'.format(k_percent, time.time()-t0))
+    return knn_dm
 
 
 def get_patient_indices(patient_id, df):
@@ -197,12 +217,12 @@ def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='absol
     return test_cluster_profile, sequences_per_cluster
 
 
-def plot_umap(embedding, cluster_vector):
+def plot_umap(embedding, cluster_vector, umap_title):
     cmap = cm.get_cmap('Set1', max(cluster_vector) + 1)
     x = embedding[:, 0]
     y = embedding[:, 1]
     plt.scatter(x, y, cmap=cmap, c=list(cluster_vector), s=3, alpha=0.5)
-    # plt.title('', fontsize=15)
+    plt.title(umap_title, fontsize=15)
     plt.xlabel('UMAP 1')
     plt.ylabel('UMAP 2')
     plt.show()
@@ -222,16 +242,16 @@ def make_classification(train_feature, test_feature, train_response, test_respon
 
 def main():
     df = get_fasta_info()
-    dm = get_dm(name=pam70, full=True)
+    dm = get_dm(path=b62, full=True)
     train_df, train_dm, y_train, test_df, test_dm, y_test = get_dm_train_test(df, dm)
 
     embedding = get_embedding(train_dm)
 
     train_g = get_graph(train_dm)
 
-    train_cluster_vector, n_cluster = get_cluster(graph=train_g, gamma=1.0)
+    train_cluster_vector, n_cluster = get_cluster(graph=train_g, gamma=1.1, kind='louvain')
 
-    plot_umap(embedding, train_cluster_vector)
+    plot_umap(embedding, train_cluster_vector, 'UMAP')
 
     train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df)
 
@@ -242,6 +262,55 @@ def main():
     make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
 
 
+def kNN_main():
+
+    df = get_fasta_info()
+    gamma = 1.11
+
+    dm_paths = [(pam70, 'PAM70'), (b45, 'BLOSUM45'), (b62, 'BLOSUM62')]
+    for dm_path, sm_name in dm_paths:
+        gt_dm = get_dm(path=dm_path, full=True)
+        train_df, gt_train_dm, y_train, test_df, test_dm, y_test = get_dm_train_test(df, gt_dm)
+        gt_embedding = get_embedding(gt_train_dm)
+
+        gt_g = get_graph(gt_train_dm)
+        gt_cluster_vector, gt_n_cluster = get_cluster(graph=gt_g, gamma=gamma, kind='louvain')
+        plot_umap(gt_embedding, gt_cluster_vector, '')
+
+        adjusted_rand_scores, n_clusters = [], []
+
+        k_percents = np.linspace(0, 1, 21)[1:-1]
+        for k_percent in k_percents:
+            kNN_dm = kNN_selection(gt_train_dm, k_percent)
+
+            kNN_embedding = get_embedding(kNN_dm)
+            kNN_g = get_graph(kNN_dm)
+            kNN_cluster_vector, kNN_n_cluster = get_cluster(graph=kNN_g, gamma=gamma, kind='louvain')
+
+            plot_umap(kNN_embedding, kNN_cluster_vector, 'kNN embedding with lowest {}% pruned'.format(k_percent*100))
+            plot_umap(gt_embedding, kNN_cluster_vector, 'kNN clusters in gt_embedding')
+
+            adjusted_rand_scores.append(adjusted_rand_score(gt_cluster_vector, kNN_cluster_vector))
+            n_clusters.append(kNN_n_cluster)
+
+        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(25, 15))
+
+        ax[0].plot(k_percents, n_clusters)
+        ax[0].set_title('{}: n_clusters vs k_percents'.format(sm_name))
+        ax[0].set_xlabel('lowest k% pruned')
+        ax[0].set_ylabel('n_clusters')
+
+        ax[1].plot(k_percents, adjusted_rand_scores)
+        ax[1].set_title('{}: ARI vs k_percents'.format(sm_name))
+        ax[1].set_xlabel('lowest k% pruned')
+        ax[1].set_ylabel('ARI')
+
+        plt.show()
+
+
 if __name__ == '__main__':
-    main()
+    os.environ['NUMEXPR_MAX_THREADS'] = '52'
+    numexpr.set_num_threads(52)
+
+    kNN_main()
 
