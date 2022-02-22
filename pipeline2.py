@@ -1,24 +1,29 @@
 import copy
 import time
 import os
-
+import joblib
 import numexpr
 import numpy as np
 import pandas as pd
-import joblib
-import networkit
-import umap
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import umap.plot
-from Bio import SeqIO
 from statistics import mode
 
+from Bio import SeqIO
+
+import networkit
+
+import umap
+import umap.plot
+
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
 from sklearn.model_selection import StratifiedShuffleSplit
-from scipy.spatial import KDTree
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report
+from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import adjusted_rand_score
+from sklearn.metrics import classification_report
+
+from scipy.spatial import KDTree
 
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
 
@@ -52,6 +57,26 @@ def get_dm(path='dummy_dm', full=False):
         dm = (dm + dm.T)
 
     return dm
+
+
+def shift_similarities_to_zero(similarity_matrix):
+    minimum = similarity_matrix.min()
+    similarity_matrix = similarity_matrix - minimum
+
+    return similarity_matrix
+
+
+def f(x):
+    return 1/(x+1)
+
+
+def similarities_to_distances(similarity_matrix):
+    similarity_matrix = shift_similarities_to_zero(similarity_matrix)
+    f_vec = np.vectorize(f)
+    distance_matrix = f_vec(similarity_matrix)
+    np.fill_diagonal(distance_matrix, 0)
+
+    return distance_matrix
 
 
 def get_dm_train_test(df, dm):
@@ -116,17 +141,35 @@ def get_embedding(dm):
     return reducer
 
 
-def get_cluster(graph, gamma, kind):
+def get_cluster(graph, gamma=1, n_cluster=4, affinity_mat=[], kind='louvain'):
+
+    cluster_vector = []
+    cluster_ids = []
+
     if kind not in ['louvain', 'leiden', 'spectral']:
         raise ValueError('\'kind\' has to be either \'louvain\', \'leiden\' or \'spectral\'')
 
-    cluster = networkit.community.detectCommunities(graph,
-                                                    algo=networkit.community.PLM(graph, refine=True, gamma=gamma))
-    cluster.compact()
-    cluster_vector = np.array(cluster.getVector())
-    clusters_ids = list(cluster.getSubsetIds())
+    if kind == 'louvain':
+        cluster = networkit.community.detectCommunities(graph,
+                                                        algo=networkit.community.PLM(graph, refine=True, gamma=gamma))
+        cluster.compact()
+        cluster_vector = np.array(cluster.getVector())
+        cluster_ids = list(cluster.getSubsetIds())
+        n_cluster = len(cluster_ids)
 
-    return cluster_vector, len(clusters_ids)
+    if kind == 'leiden':
+        cluster = networkit.community.detectCommunities(graph,
+                                                        algo=networkit.community.ParallelLeiden(graph, gamma=gamma))
+        cluster.compact()
+        cluster_vector = np.array(cluster.getVector())
+        cluster_ids = list(cluster.getSubsetIds())
+        n_cluster = len(cluster_ids)
+
+    if kind == 'spectral':
+        sc = SpectralClustering(n_clusters=n_cluster).fit(affinity_mat)
+        cluster_vector = sc.labels_
+
+    return cluster_vector, n_cluster
 
 
 def kNN_selection(dm, k_percent):
@@ -182,6 +225,7 @@ def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
 
 
 def get_kNN(train_dm, test_dm, k):
+    # TODO
     tree = KDTree(train_dm)
     dd, ii = tree.query(test_dm, k=k)
 
@@ -228,7 +272,7 @@ def plot_umap(embedding, cluster_vector, umap_title):
     plt.show()
 
 
-def plot_distance_histogram(dm):
+def plot_similarity_histogram(dm):
     flat_dm = [entry for row in dm for entry in row]
     plt.hist(flat_dm, bins='auto')
 
