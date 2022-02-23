@@ -10,6 +10,7 @@ from statistics import mode
 from Bio import SeqIO
 
 import networkit
+from networkit.community import ParallelLeiden, PLM
 
 import umap
 import umap.plot
@@ -167,46 +168,61 @@ def eigengap_heuristic(am, plot):
     return eigenvalues, eigenvectors, n_clusters
 
 
-def get_cluster(graph, gamma=1.0, n_cluster=4, affinity_mat=np.array([]), kind='louvain'):
-    # TODO Raise errors for wrong inputs.
+def get_cluster(graph=None, gamma=1.0, n_cluster=4, affinity_mat=np.array([]), kind='louvain'):
     cluster_vector = []
 
     if kind not in ['louvain', 'leiden', 'spectral']:
         raise ValueError('\'kind\' has to be either \'louvain\', \'leiden\' or \'spectral\'')
 
     if kind == 'louvain':
+        if graph is None:
+            raise ValueError('\'graph\' has to be a networkit.Graph object.')
+
         cluster = networkit.community.detectCommunities(graph,
-                                                        algo=networkit.community.PLM(graph, refine=True, gamma=gamma))
+                                                        algo=PLM(graph, refine=True, gamma=gamma))
         cluster.compact()
         cluster_vector = np.array(cluster.getVector())
         cluster_ids = list(cluster.getSubsetIds())
         n_cluster = len(cluster_ids)
 
     if kind == 'leiden':
+        if graph is None:
+            raise ValueError('\'graph\' has to be a networkit.Graph object.')
+
         cluster = networkit.community.detectCommunities(graph,
-                                                        algo=networkit.community.ParallelLeiden(graph, gamma=gamma))
+                                                        algo=ParallelLeiden(graph, gamma=gamma))
         cluster.compact()
         cluster_vector = np.array(cluster.getVector())
         cluster_ids = list(cluster.getSubsetIds())
         n_cluster = len(cluster_ids)
 
     if kind == 'spectral':
+        if not affinity_mat.size > 0:
+            raise ValueError('\'affinity_mat\' has to be a symmetric matrix with size > 0.')
+
         sc = SpectralClustering(n_clusters=n_cluster).fit(affinity_mat)
         cluster_vector = sc.labels_
 
     return cluster_vector, n_cluster
 
 
-def kNN_selection(mat, k_percent):
-    # TODO cases for affinity respectively distance matrix
+def kNN_selection(mat, k_percent, kind='affinity'):
+    if kind not in ['affinity', 'distance']:
+        raise ValueError('\'kind\' has to be either \'affinity\' or \'distance\'.')
     t0 = time.time()
     knn_mat = copy.deepcopy(mat)
     n, _ = mat.shape
     k = int(n * k_percent)
-    top_ixs = np.argpartition(mat, k)[:, :k]
+    top_ixs = []
+
+    if kind == 'affinity':
+        top_ixs = np.argpartition(mat, k)[:, :k]
+    if kind == 'distance':
+        top_ixs = np.argpartition(mat, -k)[:, -k:]
+
     rows = np.arange(n)[:, None]
     knn_mat[rows, top_ixs] = 0
-    print('kNN_selection for k_percent = {} took {:.2f}s'.format(k_percent, time.time()-t0))
+    print('kNN_selection (kind={}) for k_percent = {} took {:.2f}s'.format(kind, k_percent, time.time()-t0))
     return knn_mat
 
 
