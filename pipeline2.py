@@ -81,7 +81,6 @@ def similarities_to_distances(am):
 
 def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2):
     splits = []
-    X_train, X_test, y_train, y_test = [], [], [], [],
 
     patient_ids = np.unique([x[0] for x in df.index])
     response = np.array([1 if 'BL' in patient or 'FU' in patient else 0 for patient in patient_ids])
@@ -317,16 +316,45 @@ def plot_similarity_histogram(dm):
 
 
 def make_classification(train_feature, test_feature, train_response, test_response):
-    # TODO CV on patients
-    # TODO cases for substitution matrices
-    # TODO k of nearest neighbors
-    # TODO cases for cluster algorithm to use
-    # TODO gridsearch for k, gamma, and other metaparameters
-
     model = LogisticRegression()
     model.fit(train_feature, train_response)
     y_pred = model.predict(test_feature)
     print(classification_report(test_response, y_pred))
+
+
+def classification_main(dm_path, classes,
+                        n_splits, test_size,
+                        cluster_kind,
+                        k_=None, g_=None,
+                        knn_clf_k=11):
+
+    df = get_fasta_info()
+    # TODO reduce to classes
+    A = get_am(dm_path, full=True)
+    A = shift_similarities_to_zero(A)           # shifted affinity matrix A
+
+    cv_splits = get_matrix_train_test(df=df, mat=A, n_splits=n_splits, test_size=test_size)
+
+    for train_df, train_mat, y_train, test_df, test_mat, y_test in cv_splits:
+
+        # TODO k_, g_ loop for range of results
+        if k_ is not None:
+            pass
+        if g_ is not None:
+            pass
+
+        if cluster_kind in ['louvain', 'leiden']:
+            train_graph = get_graph(train_mat)
+
+        elif cluster_kind == 'spectral':
+            eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(A, plot=False)
+
+        train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
+                                                      n_cluster=n_sc_cluster,
+                                                      kind=cluster_kind)
+
+        # TODO visualize UMAP w/ cluster
+        # TODO visualize eigengap
 
 
 def main():
