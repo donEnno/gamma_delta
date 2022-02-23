@@ -16,12 +16,12 @@
 
 ### Pipeline 2.0
 - ~~Test-Train Split~~
-- Distanzen-Verteilung
-- kNN Graph / ~~KDTree~~
+- ~~Distanzen-Verteilung~~
+- ~~kNN Graph~~ / ~~KDTree~~
 - Clustering
   - ~~Louvain~~
   - Leiden
-  - Spectral
+  - ~~Spectral~~
   - ARI: cut-off vs cluster performance
 - ~~Training-Cluster-Profile~~
 - kNN Classifier
