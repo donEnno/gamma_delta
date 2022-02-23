@@ -24,8 +24,6 @@ from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import classification_report
 from sklearn.neighbors import NearestNeighbors
 
-from scipy.spatial import KDTree
-
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
 
 path_to_dm = 'D:/enno/2022/hiwi/data/dm/pam/BLFUHD_PAM70_10_0.5_DM'
@@ -63,7 +61,7 @@ def get_am(path='dummy_dm', full=False):
 def shift_similarities_to_zero(am):
     minimum = am.min()
     am = am - minimum
-
+    np.fill_diagonal(am, 0)
     return am
 
 
@@ -80,13 +78,14 @@ def similarities_to_distances(am):
     return distance_matrix
 
 
-def get_matrix_train_test(df, mat):
+def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2):
+    splits = []
     X_train, X_test, y_train, y_test = [], [], [], [],
 
     patient_ids = np.unique([x[0] for x in df.index])
     response = np.array([1 if 'BL' in patient or 'FU' in patient else 0 for patient in patient_ids])
 
-    sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2)
+    sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size)
 
     for train_index, test_index in sss.split(patient_ids, response):
         train_index.sort()
@@ -95,16 +94,18 @@ def get_matrix_train_test(df, mat):
         X_train, X_test = patient_ids[train_index], patient_ids[test_index]
         y_train, y_test = response[train_index], response[test_index]
 
-    train_ixs = [ix for patient_ixs in [get_patient_indices(tag, df) for tag in X_train] for ix in patient_ixs]
-    test_ixs = [ix for patient_ixs in [get_patient_indices(tag, df) for tag in X_test] for ix in patient_ixs]
+        train_ixs = [ix for patient_ixs in [get_patient_indices(tag, df) for tag in X_train] for ix in patient_ixs]
+        test_ixs = [ix for patient_ixs in [get_patient_indices(tag, df) for tag in X_test] for ix in patient_ixs]
 
-    train_mat = np.take(np.take(mat, train_ixs, axis=0), train_ixs, axis=1)
-    test_mat = np.take(np.take(mat, test_ixs, axis=0), train_ixs, axis=1)
+        train_mat = np.take(np.take(mat, train_ixs, axis=0), train_ixs, axis=1)
+        test_mat = np.take(np.take(mat, test_ixs, axis=0), train_ixs, axis=1)
 
-    train_df = df.iloc[train_ixs]
-    test_df = df.iloc[test_ixs]
+        train_df = df.iloc[train_ixs]
+        test_df = df.iloc[test_ixs]
 
-    return train_df, train_mat, y_train, test_df, test_mat, y_test
+        splits.append((train_df, train_mat, y_train, test_df, test_mat, y_test))
+
+    return splits
 
 
 path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
@@ -144,7 +145,7 @@ def get_embedding(data):
     return reducer
 
 
-def     eigengap_heuristic(am, plot):
+def eigengap_heuristic(am, plot):
     n, _ = am.shape
     identity = np.identity(n)
 
