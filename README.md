@@ -20,11 +20,11 @@
 - ~~kNN Graph~~ / ~~KDTree~~
 - Clustering
   - ~~Louvain~~
-  - Leiden
+  - ~~Leiden~~
   - ~~Spectral~~
   - ARI: cut-off vs cluster performance
 - ~~Training-Cluster-Profile~~
-- kNN Classifier
+- ~~kNN Classifier~~
   - ~~Mode of neighbors~~
   - ...
 - ~~Logistic Regression~~
