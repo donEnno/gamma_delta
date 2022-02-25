@@ -38,6 +38,7 @@ pam70 = "/home/ubuntu/Enno/mnt/volume/dm_in_use/BLFUHD_PAM70_1_0.1_DM"
 
 
 def write_fasta():
+    ""
     with open(path_to_fasta, 'w') as dummy_file:
         for raw_file, prefix, pat_no in zip(os.listdir(path_to_data),
                                             66 * ['BL'] + 55 * ['FU'] + 29 * ['HD'],
