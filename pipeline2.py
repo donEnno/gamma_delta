@@ -22,7 +22,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.linear_model import LogisticRegression
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import adjusted_rand_score
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, f1_score, balanced_accuracy_score, precision_score, recall_score
 from sklearn.neighbors import NearestNeighbors
 
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
@@ -38,7 +38,6 @@ pam70 = "/home/ubuntu/Enno/mnt/volume/dm_in_use/BLFUHD_PAM70_1_0.1_DM"
 
 
 def write_fasta():
-    ""
     with open(path_to_fasta, 'w') as dummy_file:
         for raw_file, prefix, pat_no in zip(os.listdir(path_to_data),
                                             66 * ['BL'] + 55 * ['FU'] + 29 * ['HD'],
@@ -230,6 +229,24 @@ def get_patient_indices(patient_id, df):
     return [ix for ix, header in enumerate(df.index) if patient_id == header[0]]
 
 
+def get_cohorte_indices(cohorte: str, df):
+    patient_ids = np.unique([_[0] for _ in df.index])
+    cohorte_patient_ids = [_ for _ in patient_ids if cohorte in _]
+    cohorte_indices = [get_patient_indices(patient_id, df) for patient_id in cohorte_patient_ids]
+    cohorte_indices = [ix for patient_indices in cohorte_indices for ix in patient_indices]
+    cohorte_indices.sort()
+
+    return cohorte_indices
+
+
+def exclude_class(class_label: str, df, A):
+    del_ixs = get_cohorte_indices(class_label, df)
+    reduced_A = np.delete(A, del_ixs, axis=0)
+    reduced_A = np.delete(reduced_A, del_ixs, axis=0)
+
+    return reduced_A
+
+
 def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
     if kind not in ['absolute', 'relative', 'freq']:
         raise ValueError('\'kind\' has to be either \'absolute\', \'relative\' or \'freq\'')
@@ -322,40 +339,84 @@ def make_classification(train_feature, test_feature, train_response, test_respon
     y_pred = model.predict(test_feature)
     print(classification_report(test_response, y_pred))
 
+    f1 = f1_score(y_true=test_response, y_pred=y_pred)
+    bal_acc = balanced_accuracy_score(y_true=test_response, y_pred=y_pred)
+    prec = precision_score(y_true=test_response, y_pred=y_pred)
+    sens = recall_score(y_true=test_response, y_pred=y_pred, pos_label=1)
+    spec = recall_score(y_true=test_response, y_pred=y_pred, pos_labels=0)
 
-def classification_main(dm_path, classes,
+    return [f1, bal_acc, prec, sens, spec]
+
+
+def classification_main(dm_path, class_label_to_exclude,
                         n_splits, test_size,
                         cluster_kind,
                         k_=None, g_=None,
-                        knn_clf_k=11):
+                        knn_clf_k=11,
+                        plot_eigengap=False, plot_full_UMAP=False, plot_excluded_class_UMAP=False, plot_UMAP_w_clusters=False):
+
+    if k_ is None:
+        k_ = [0]
+
+    train_graph = None
+    n_sc_cluster = 0
+    embedding = []
 
     df = get_fasta_info()
-    # TODO reduce to classes
-    A = get_am(dm_path, full=True)
-    A = shift_similarities_to_zero(A)           # shifted affinity matrix A
+    full_A = get_am(dm_path, full=True)
+    full_A = shift_similarities_to_zero(full_A)           # shifted affinity matrix A
+    full_D = similarities_to_distances(full_A)
+    full_embedding = get_embedding(full_D)
 
-    cv_splits = get_matrix_train_test(df=df, mat=A, n_splits=n_splits, test_size=test_size)
+    if plot_full_UMAP:
+        n, _ = full_D.shape
+        # TODO UMAP title
+        plot_umap(full_embedding, [1]*n, '')
 
-    for train_df, train_mat, y_train, test_df, test_mat, y_test in cv_splits:
+    if class_label_to_exclude:
+        A = exclude_class(class_label_to_exclude, df, full_A)
+        D = exclude_class(class_label_to_exclude, df, full_D)
+        embedding = get_embedding(D)
+    else:
+        A = full_A
 
-        # TODO k_, g_ loop for range of results
-        if k_ is not None:
-            pass
-        if g_ is not None:
-            pass
+    if plot_excluded_class_UMAP:
+        n, _ = full_D.shape
+        # TODO UMAP title
+        plot_umap(embedding, [1] * n, '')
 
-        if cluster_kind in ['louvain', 'leiden']:
-            train_graph = get_graph(train_mat)
+    for k_percent in k_:
+        if k_percent == 0:
+            A_in_use = A
+        else:
+            A_in_use = kNN_selection(A, k_percent)
 
-        elif cluster_kind == 'spectral':
-            eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(A, plot=False)
+        cv_splits = get_matrix_train_test(df=df, mat=A_in_use, n_splits=n_splits, test_size=test_size)
+        for train_df, train_mat, y_train, test_df, test_mat, y_test in cv_splits:
 
-        train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
-                                                      n_cluster=n_sc_cluster,
-                                                      kind=cluster_kind)
+            if cluster_kind in ['louvain', 'leiden']:
+                train_graph = get_graph(train_mat)
 
-        # TODO visualize UMAP w/ cluster
-        # TODO visualize eigengap
+            elif cluster_kind == 'spectral':
+                eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(A, plot=plot_eigengap)
+
+            train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
+                                                          n_cluster=n_sc_cluster,
+                                                          kind=cluster_kind)
+            if plot_UMAP_w_clusters:
+                train_D = similarities_to_distances(train_mat)
+                train_mbed = get_embedding(train_D)
+                # TODO UMAP title
+                plot_umap(train_mbed, train_cluster_vector, '')
+
+            # TODO kind
+            train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df)
+            distances, indices = get_kNN(train_mat, test_mat, k=knn_clf_k)
+            test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
+                                                                                       test_df)
+            performance = make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
+
+            # TODO Get average of performances for on CV
 
 
 def main():
