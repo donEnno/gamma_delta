@@ -29,7 +29,7 @@
   - ...
 - ~~Logistic Regression~~
   - Grid Search für gamma
-  - Klassenbestimmung (BL vs HD, BL vs FU, ...)
+  - ~~Klassenbestimmung (BL vs HD, BL vs FU, ...)~~
 - Cluster Analysen
 
 ### Literatur
@@ -41,8 +41,6 @@
 
 ### Spectral Clustering
 [Spectral Clusterin I](https://towardsdatascience.com/spectral-clustering-aba2640c0d5b), [Spectral Clustering II](https://towardsdatascience.com/spectral-graph-clustering-and-optimal-number-of-clusters-estimation-32704189afbe), [Luxburg - Spectral Clustering Tutorial](http://www.tml.cs.uni-tuebingen.de/team/luxburg/publications/Luxburg07_tutorial.pdf), [Spectral Clusterin III](http://web.cs.ucla.edu/~yzsun/classes/2017Winter_CS249/Slides/Clustering2.pdf)
-
-
 
 
 Wichtigkeit: OS -> PFS -> Response
