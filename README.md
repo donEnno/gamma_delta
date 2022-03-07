@@ -23,6 +23,7 @@
   - ~~Leiden~~
   - ~~Spectral~~
   - ARI: cut-off vs cluster performance
+  - cut-off vs eigengap
 - ~~Training-Cluster-Profile~~
 - ~~kNN Classifier~~
   - ~~Mode of neighbors~~
