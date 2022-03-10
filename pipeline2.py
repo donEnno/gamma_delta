@@ -249,7 +249,7 @@ def exclude_class(class_label: str, df, A):
     del_ixs = get_cohorte_indices(class_label, df)
     reduced_A = np.delete(A, del_ixs, axis=0)
     reduced_A = np.delete(reduced_A, del_ixs, axis=1)
-    reduced_df = df.drop(del_ixs)
+    reduced_df = df.drop(df.index[del_ixs])
 
     return reduced_A, reduced_df
 
@@ -271,16 +271,17 @@ def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
         ixs = [ix for ix, header in enumerate(df.index) if tag == header[0]]
 
         patient_sequences = np.array(df.iloc[ixs]['sequence'].to_list())
+        patient_Vs = np.array(df.iloc[ixs]['v'].to_list())
         patient_frequencies = np.array(df.iloc[ixs]['freq'].to_list()).astype(float)
         patient_cluster = cluster_vector[ixs]
 
-        for sequence, cluster, frequency in zip(patient_sequences, patient_cluster, patient_frequencies):
+        for sequence, cluster, frequency, v in zip(patient_sequences, patient_cluster, patient_frequencies, patient_Vs):
             if kind == 'relative' or kind == 'absolute':
                 feature_vector[patient_ix, cluster] += 1
             if kind == 'freq' or kind == 'relative_freq':
                 feature_vector[patient_ix, cluster] += frequency
 
-            sequences_per_cluster[cluster].append([tag, sequence])
+            sequences_per_cluster[cluster].append([tag[:2], tag[:-1], sequence, v])
 
     if kind == 'relative':
         feature_vector = feature_vector / feature_vector.sum(axis=0)
