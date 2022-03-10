@@ -3,6 +3,7 @@ import time
 import os
 import joblib
 import numexpr
+from collections import Counter
 import numpy as np
 import pandas as pd
 from statistics import mode
@@ -24,6 +25,9 @@ from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import classification_report, f1_score, balanced_accuracy_score, precision_score, recall_score
 from sklearn.neighbors import NearestNeighbors
+import matplotlib
+
+matplotlib.use('Agg')
 
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
 
@@ -51,8 +55,8 @@ def write_fasta():
                 dummy_file.write(seq + '\n')
 
 
-def get_am(path='dummy_dm', full=False):
-    am = joblib.load(path)
+def get_am(path_to_am='dummy_dm', full=False):
+    am = joblib.load(path_to_am)
     if full:
         am = (am + am.T)
 
@@ -140,12 +144,12 @@ def get_graph(dm):
 
 
 def get_embedding(data):
-    reducer = umap.UMAP().fit_transform(data)
+    reducer = umap.UMAP(metric='precomputed').fit_transform(data)
 
     return reducer
 
 
-def eigengap_heuristic(am, plot):
+def eigengap_heuristic(am, plot, loc):
     n, _ = am.shape
     identity = np.identity(n)
 
@@ -159,7 +163,9 @@ def eigengap_heuristic(am, plot):
     if plot:
         plt.title('Largest eigen values of input matrix')
         plt.scatter(np.arange(len(eigenvalues)), eigenvalues, s=1)
-        plt.show()
+        plt.savefig(loc)
+        # plt.show()
+        plt.clf()
 
     index_largest_gap = np.argmax(np.diff(eigenvalues))
     n_clusters = index_largest_gap + 1
@@ -199,7 +205,7 @@ def get_cluster(graph=None, gamma=1.0, n_cluster=4, affinity_mat=np.array([]), k
         if not affinity_mat.size > 0:
             raise ValueError('\'affinity_mat\' has to be a symmetric matrix with size > 0.')
 
-        sc = SpectralClustering(n_clusters=n_cluster).fit(affinity_mat)
+        sc = SpectralClustering(n_clusters=n_cluster, affinity='precomputed').fit(affinity_mat)
         cluster_vector = sc.labels_
 
     return cluster_vector, n_cluster
@@ -242,9 +248,10 @@ def get_cohorte_indices(cohorte: str, df):
 def exclude_class(class_label: str, df, A):
     del_ixs = get_cohorte_indices(class_label, df)
     reduced_A = np.delete(A, del_ixs, axis=0)
-    reduced_A = np.delete(reduced_A, del_ixs, axis=0)
+    reduced_A = np.delete(reduced_A, del_ixs, axis=1)
+    reduced_df = df.drop(del_ixs)
 
-    return reduced_A
+    return reduced_A, reduced_df
 
 
 def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
@@ -270,12 +277,15 @@ def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
         for sequence, cluster, frequency in zip(patient_sequences, patient_cluster, patient_frequencies):
             if kind == 'relative' or kind == 'absolute':
                 feature_vector[patient_ix, cluster] += 1
-            if kind == 'freq':
+            if kind == 'freq' or kind == 'relative_freq':
                 feature_vector[patient_ix, cluster] += frequency
 
-            sequences_per_cluster[cluster].append(sequence)
+            sequences_per_cluster[cluster].append([tag, sequence])
 
     if kind == 'relative':
+        feature_vector = feature_vector / feature_vector.sum(axis=0)
+
+    if kind == 'relative_freq':
         feature_vector = feature_vector / feature_vector.sum(axis=0)
 
     return feature_vector, sequences_per_cluster
@@ -317,7 +327,7 @@ def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='absol
     return test_cluster_profile, sequences_per_cluster
 
 
-def plot_umap(embedding, cluster_vector, umap_title):
+def plot_umap(embedding, cluster_vector, umap_title, loc):
     cmap = cm.get_cmap('Set1', max(cluster_vector) + 1)
     x = embedding[:, 0]
     y = embedding[:, 1]
@@ -325,7 +335,9 @@ def plot_umap(embedding, cluster_vector, umap_title):
     plt.title(umap_title, fontsize=15)
     plt.xlabel('UMAP 1')
     plt.ylabel('UMAP 2')
-    plt.show()
+    plt.savefig(loc)
+    # plt.show()
+    plt.clf()
 
 
 def plot_similarity_histogram(dm):
@@ -343,47 +355,82 @@ def make_classification(train_feature, test_feature, train_response, test_respon
     bal_acc = balanced_accuracy_score(y_true=test_response, y_pred=y_pred)
     prec = precision_score(y_true=test_response, y_pred=y_pred)
     sens = recall_score(y_true=test_response, y_pred=y_pred, pos_label=1)
-    spec = recall_score(y_true=test_response, y_pred=y_pred, pos_labels=0)
+    spec = recall_score(y_true=test_response, y_pred=y_pred, pos_label=0)
 
     return [f1, bal_acc, prec, sens, spec]
 
 
-def classification_main(dm_path, class_label_to_exclude,
+def visualize_cluster_distributions(cluster_info, sm, ck):
+
+    classes = ['HD', 'BL', 'FU']
+
+    for cix, cluster in enumerate(cluster_info):
+        temp_df = pd.DataFrame(columns=['Class', 'ID', 'seq', 'v'])
+
+        for ix, (cohorte, tag, seq, v) in cluster:
+            temp_df.loc[ix] = [cohorte, tag, seq, v]
+
+        sub_1 = temp_df.Class.value_counts()
+        sub_2 = temp_df.v.value_counts()
+
+        visual_df = pd.concat([sub_1, sub_2], axis=1, keys=['classes', 'TRDV'])
+
+        axes = visual_df.plot(kind='pie', subplots=True, figsize=(10, 6))
+        for ax in axes:
+            ax.set_aspect('equal')
+            ax.yaxis.set_label_coords(-0.15, 0.5)
+            ax.legend(bbox_to_anchor=(2.1, 0.5), loc='center right')
+        plt.subplots_adjust(wspace=1.4)
+        plt.savefig('/home/ubuntu/Enno/gammaDelta/{}/{}_{}_{}.png'.format(sm, sm, ck, cix), bbox_inches='tight')
+
+
+def classification_main(sm_name,
+                        dm_path,
                         n_splits, test_size,
-                        cluster_kind,
+                        class_label_to_exclude=None,
                         k_=None, g_=None,
                         knn_clf_k=11,
                         plot_eigengap=False, plot_full_UMAP=False, plot_excluded_class_UMAP=False, plot_UMAP_w_clusters=False):
+
+    print('Starting run on {}'.format(sm_name))
+
+    overall_results = []
 
     if k_ is None:
         k_ = [0]
 
     train_graph = None
     n_sc_cluster = 0
-    embedding = []
 
     df = get_fasta_info()
     full_A = get_am(dm_path, full=True)
     full_A = shift_similarities_to_zero(full_A)           # shifted affinity matrix A
     full_D = similarities_to_distances(full_A)
+
+    print('Data acquired, shifted, and transformed.')
+
     full_embedding = get_embedding(full_D)
 
     if plot_full_UMAP:
         n, _ = full_D.shape
-        # TODO UMAP title
-        plot_umap(full_embedding, [1]*n, '')
+        plot_umap(full_embedding, [1]*n, '{} - all sequences included'.format(sm_name),
+                  loc='{}_full_umap.png'.format(sm_name))
 
     if class_label_to_exclude:
-        A = exclude_class(class_label_to_exclude, df, full_A)
-        D = exclude_class(class_label_to_exclude, df, full_D)
-        embedding = get_embedding(D)
+        A, df = exclude_class(class_label_to_exclude, df, full_A)
+        D, _ = exclude_class(class_label_to_exclude, df, full_D)
+
+        print('Exclusion accomplished.')
+
+        if plot_excluded_class_UMAP:
+            embedding = get_embedding(D)
+            n, _ = D.shape
+            plot_umap(embedding, [1] * n, '{} - {} excluded'.format(sm_name, class_label_to_exclude),
+                      loc='/home/ubuntu/Enno/gammaDelta/{}/{}_{}_excluded_umap.png'.format(sm_name, sm_name, class_label_to_exclude))
     else:
         A = full_A
 
-    if plot_excluded_class_UMAP:
-        n, _ = full_D.shape
-        # TODO UMAP title
-        plot_umap(embedding, [1] * n, '')
+    print('Now starting k% iteration.')
 
     for k_percent in k_:
         if k_percent == 0:
@@ -392,36 +439,87 @@ def classification_main(dm_path, class_label_to_exclude,
             A_in_use = kNN_selection(A, k_percent)
 
         cv_splits = get_matrix_train_test(df=df, mat=A_in_use, n_splits=n_splits, test_size=test_size)
-        for train_df, train_mat, y_train, test_df, test_mat, y_test in cv_splits:
+        cv_performance, cv_self_performance = [], []
 
-            if cluster_kind in ['louvain', 'leiden']:
-                train_graph = get_graph(train_mat)
+        for cluster_kind in ['spectral', 'leiden']:
+            # for feature_kind in ['absolute', 'relative', 'freq', 'relative_freq']:
+            # print('Now starting {} clustering.'.format(cluster_kind))
 
-            elif cluster_kind == 'spectral':
-                eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(A, plot=plot_eigengap)
+            first_loop = True
+            for train_df, train_mat, y_train, test_df, test_mat, y_test in cv_splits:
+                print(len(train_df), len(test_df))
+                print(train_mat.shape, test_mat.shape)
+                print(y_train, y_test)
 
-            train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
-                                                          n_cluster=n_sc_cluster,
-                                                          kind=cluster_kind)
-            if plot_UMAP_w_clusters:
-                train_D = similarities_to_distances(train_mat)
-                train_mbed = get_embedding(train_D)
-                # TODO UMAP title
-                plot_umap(train_mbed, train_cluster_vector, '')
+                if cluster_kind in ['louvain', 'leiden']:
+                    train_graph = get_graph(train_mat)
 
-            # TODO kind
-            train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df)
-            distances, indices = get_kNN(train_mat, test_mat, k=knn_clf_k)
-            test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
-                                                                                       test_df)
-            performance = make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
+                elif cluster_kind == 'spectral':
+                    eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(A, plot=plot_eigengap,
+                                                                                 loc='/home/ubuntu/Enno/gammaDelta/{}/{}_spectral_eigengap.png'.format(sm_name, sm_name))
+                    if n_sc_cluster > 100:
+                        n_sc_cluster = 50
 
-            # TODO Get average of performances for on CV
+                train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
+                                                              affinity_mat=train_mat,
+                                                              n_cluster=n_sc_cluster,
+                                                              kind=cluster_kind)
+
+                if plot_UMAP_w_clusters:
+                    train_D = similarities_to_distances(train_mat)
+                    train_mbed = get_embedding(train_D)
+                    plot_umap(train_mbed, train_cluster_vector, '{} - {} excluded'.format(sm_name, class_label_to_exclude),
+                              loc='/home/ubuntu/Enno/gammaDelta/{}/{}_train_UMAP_w_{}.png'.format(sm_name, sm_name, cluster_kind))
+
+                # TODO kind iterator
+                train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df, kind='relative')
+                distances, indices = get_kNN(train_mat, test_mat, k=knn_clf_k)
+                test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
+                                                                                           test_df)
+
+                if first_loop:
+                    visualize_cluster_distributions(train_cluster_vector, sm=sm_name, ck=cluster_kind)
+                    first_loop = False
+
+                performance = make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
+                print(performance)
+
+                self_performance = make_classification(train_feature_vector, train_feature_vector, y_train, y_train)
+                print(self_performance)
+
+                cv_performance.append(performance)
+                cv_self_performance.append(self_performance)
+
+            average_cv_performance = np.average(cv_performance, axis=0)
+            average_cv_self_performance = np.average(cv_self_performance, axis=0)
+
+            cv_performance, cv_self_performance = [], []
+
+            overall_results.append([sm_name, cluster_kind, n_cluster, k_percent,
+                                    average_cv_performance[0],
+                                    average_cv_performance[1],
+                                    average_cv_performance[2],
+                                    average_cv_performance[3],
+                                    average_cv_performance[4]])
+
+            overall_results.append([sm_name+' self', cluster_kind, n_cluster, k_percent,
+                                    average_cv_self_performance[0],
+                                    average_cv_self_performance[1],
+                                    average_cv_self_performance[2],
+                                    average_cv_self_performance[3],
+                                    average_cv_self_performance[4]])
+
+    result_df = pd.DataFrame(columns=['sm', 'cluster_kind', 'n_cluster', 'k_percent', 'f1', 'bal_acc', 'prec', 'sens', 'spec', 'feature_kind'])
+    for ix, result in enumerate(overall_results):
+        result_df.loc[ix] = result
+
+    result_df.to_csv('/home/ubuntu/Enno/gammaDelta/{}/{}_result.csv'.format(sm_name, sm_name))
+    print('{} run done.'.format(sm_name))
 
 
 def main():
     df = get_fasta_info()
-    dm = get_am(path=b62, full=True)
+    dm = get_am(path_to_am=b62, full=True)
     train_df, train_dm, y_train, test_df, test_dm, y_test = get_matrix_train_test(df, dm)
 
     embedding = get_embedding(train_dm)
@@ -430,7 +528,7 @@ def main():
 
     train_cluster_vector, n_cluster = get_cluster(graph=train_g, gamma=1.1, kind='louvain')
 
-    plot_umap(embedding, train_cluster_vector, 'UMAP')
+    plot_umap(embedding, train_cluster_vector, 'UMAP', '')
 
     train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df)
 
@@ -448,13 +546,13 @@ def kNN_main():
 
     dm_paths = [(pam70, 'PAM70'), (b45, 'BLOSUM45'), (b62, 'BLOSUM62')]
     for dm_path, sm_name in dm_paths:
-        gt_dm = get_am(path=dm_path, full=True)
+        gt_dm = get_am(path_to_am=dm_path, full=True)
         train_df, gt_train_dm, y_train, test_df, test_dm, y_test = get_matrix_train_test(df, gt_dm)
         gt_embedding = get_embedding(gt_train_dm)
 
         gt_g = get_graph(gt_train_dm)
         gt_cluster_vector, gt_n_cluster = get_cluster(graph=gt_g, gamma=gamma, kind='louvain')
-        plot_umap(gt_embedding, gt_cluster_vector, '')
+        plot_umap(gt_embedding, gt_cluster_vector, '', '')
 
         adjusted_rand_scores, n_clusters = [], []
 
@@ -466,8 +564,8 @@ def kNN_main():
             kNN_g = get_graph(kNN_dm)
             kNN_cluster_vector, kNN_n_cluster = get_cluster(graph=kNN_g, gamma=gamma, kind='louvain')
 
-            plot_umap(kNN_embedding, kNN_cluster_vector, 'kNN embedding with lowest {}% pruned'.format(k_percent*100))
-            plot_umap(gt_embedding, kNN_cluster_vector, 'kNN clusters in gt_embedding')
+            plot_umap(kNN_embedding, kNN_cluster_vector, 'kNN embedding with lowest {}% pruned'.format(k_percent*100), '')
+            plot_umap(gt_embedding, kNN_cluster_vector, 'kNN clusters in gt_embedding', '')
 
             adjusted_rand_scores.append(adjusted_rand_score(gt_cluster_vector, kNN_cluster_vector))
             n_clusters.append(kNN_n_cluster)
@@ -491,4 +589,13 @@ if __name__ == '__main__':
     os.environ['NUMEXPR_MAX_THREADS'] = '52'
     numexpr.set_num_threads(52)
 
-    kNN_main()
+    names = [('PAM70', pam70), ('BLOSUM45', b45), ('BLOSUM62', b62)]
+
+    for name, path in names:
+        classification_main(sm_name=name, dm_path=path,
+                            n_splits=5, test_size=0.2, k_=[0], g_=1,
+                            class_label_to_exclude='FU',
+                            plot_eigengap=True,
+                            plot_full_UMAP=False,
+                            plot_excluded_class_UMAP=False,
+                            plot_UMAP_w_clusters=False)
