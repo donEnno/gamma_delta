@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 from statistics import mode
 
-from Bio import SeqIO
+from Bio import SeqIO, AlignIO
+from Bio.Align import AlignInfo
 
 import networkit
 from networkit.community import ParallelLeiden, PLM
@@ -300,6 +301,7 @@ def get_kNN(train_dm, test_dm, k=11):
 
 
 def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='absolute'):
+    # TODO adjust output so it can be visualized
     n_cluster = len(np.unique(train_cluster_vector))
 
     patient_ids = np.unique([x[0] for x in test_df.index])
@@ -313,15 +315,16 @@ def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='absol
 
         patient_sequences = np.array(test_df.iloc[ixs]['sequence'].to_list())
         patient_frequencies = np.array(test_df.iloc[ixs]['freq'].to_list()).astype(float)
+        patient_Vs = np.array(test_df.iloc[ixs]['v'].to_list())
 
-        for knn_ixs, sequence, frequency in zip(indices[ixs], patient_sequences, patient_frequencies):
+        for knn_ixs, sequence, frequency, v in zip(indices[ixs], patient_sequences, patient_frequencies, patient_Vs):
             cluster = mode(train_cluster_vector[knn_ixs])
             if kind == 'relative' or kind == 'absolute':
                 test_cluster_profile[patient_ix, cluster] += 1
             if kind == 'freq':
                 test_cluster_profile[patient_ix, cluster] += frequency
 
-            sequences_per_cluster[cluster].append(sequence)
+            sequences_per_cluster[cluster].append([tag[:2], tag[:-1], sequence, v])
     if kind == 'relative':
         test_cluster_profile = test_cluster_profile / test_cluster_profile.sum(axis=0)
 
@@ -368,7 +371,7 @@ def visualize_cluster_distributions(cluster_info, sm, ck):
     for cix, cluster in enumerate(cluster_info):
         temp_df = pd.DataFrame(columns=['Class', 'ID', 'seq', 'v'])
 
-        for ix, (cohorte, tag, seq, v) in cluster:
+        for ix, (cohorte, tag, seq, v) in enumerate(cluster):
             temp_df.loc[ix] = [cohorte, tag, seq, v]
 
         sub_1 = temp_df.Class.value_counts()
@@ -383,6 +386,25 @@ def visualize_cluster_distributions(cluster_info, sm, ck):
             ax.legend(bbox_to_anchor=(2.1, 0.5), loc='center right')
         plt.subplots_adjust(wspace=1.4)
         plt.savefig('/home/ubuntu/Enno/gammaDelta/{}/{}_{}_{}.png'.format(sm, sm, ck, cix), bbox_inches='tight')
+
+
+def get_consensus_sequences(cluster_info, percent_occurence, sm, ck):
+    for cix, cluster in enumerate(cluster_info):
+        temp_df = pd.DataFrame(columns=['Class', 'ID', 'seq', 'v'])
+
+        for ix, (cohorte, tag, seq, v) in enumerate(cluster):
+            temp_df.loc[ix] = [cohorte, tag, seq, v]
+
+        list_seq = temp_df.seq.to_list()
+        list_name = temp_df.ID.to_list()
+        temp_file = open("temp_fasta.fasta", "w")
+        for i in range(len(list_seq)):
+            temp_file.write(">" + list_name[i] + "\n" + list_seq[i] + "\n")
+
+        alignment = AlignIO.read(temp_file, 'fasta')
+        summary_align = AlignInfo.SummaryInfo(alignment)
+        summary_align.dumb_consensus(percent_occurence)
+        temp_file.close()
 
 
 def classification_main(sm_name,
@@ -418,7 +440,7 @@ def classification_main(sm_name,
                   loc='{}_full_umap.png'.format(sm_name))
 
     if class_label_to_exclude:
-        A, df = exclude_class(class_label_to_exclude, df, full_A)
+        A, reduced_df = exclude_class(class_label_to_exclude, df, full_A)
         D, _ = exclude_class(class_label_to_exclude, df, full_D)
 
         print('Exclusion accomplished.')
@@ -430,6 +452,7 @@ def classification_main(sm_name,
                       loc='/home/ubuntu/Enno/gammaDelta/{}/{}_{}_excluded_umap.png'.format(sm_name, sm_name, class_label_to_exclude))
     else:
         A = full_A
+        reduced_df = df
 
     print('Now starting k% iteration.')
 
@@ -439,7 +462,7 @@ def classification_main(sm_name,
         else:
             A_in_use = kNN_selection(A, k_percent)
 
-        cv_splits = get_matrix_train_test(df=df, mat=A_in_use, n_splits=n_splits, test_size=test_size)
+        cv_splits = get_matrix_train_test(df=reduced_df, mat=A_in_use, n_splits=n_splits, test_size=test_size)
         cv_performance, cv_self_performance = [], []
 
         for cluster_kind in ['spectral', 'leiden']:
@@ -479,7 +502,7 @@ def classification_main(sm_name,
                                                                                            test_df)
 
                 if first_loop:
-                    visualize_cluster_distributions(train_cluster_vector, sm=sm_name, ck=cluster_kind)
+                    visualize_cluster_distributions(train_sequences_per_cluster, sm=sm_name, ck=cluster_kind)
                     first_loop = False
 
                 performance = make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
@@ -510,7 +533,8 @@ def classification_main(sm_name,
                                     average_cv_self_performance[3],
                                     average_cv_self_performance[4]])
 
-    result_df = pd.DataFrame(columns=['sm', 'cluster_kind', 'n_cluster', 'k_percent', 'f1', 'bal_acc', 'prec', 'sens', 'spec', 'feature_kind'])
+    result_df = pd.DataFrame(columns=['sm', 'cluster_kind', 'n_cluster', 'k_percent', 'f1', 'bal_acc', 'prec', 'sens', 'spec'])
+
     for ix, result in enumerate(overall_results):
         result_df.loc[ix] = result
 
@@ -586,6 +610,143 @@ def kNN_main():
         plt.show()
 
 
+def spectral_n_main(sm_path, sm_name):
+    performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
+    self_performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
+
+    full_df = get_fasta_info()
+    full_A = get_am(sm_path, full=True)
+    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
+    full_D = similarities_to_distances(full_A)
+
+    red_A, reduced_df = exclude_class('FU', full_df, full_A)
+    red_D, _ = exclude_class('FU', full_df, full_D)
+
+    cv_splits = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
+    train_df, train_mat, y_train, test_df, test_mat, y_test = cv_splits[0]
+
+    train_graph = get_graph(train_mat)
+    train_D = similarities_to_distances(train_mat)
+
+    # red_mbed = get_embedding(red_D)
+    # train_mbed = get_embedding(train_D)
+
+    for ix, n_scluster in enumerate([3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000,  1250,  1500]):
+        print(ix, n_scluster)
+        train_cluster_vector, n_cluster = get_cluster(graph=None, gamma=1,
+                                                      affinity_mat=train_mat,
+                                                      n_cluster=n_scluster,
+                                                      kind='spectral')
+
+        train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df,
+                                                                                     kind='relative')
+
+        distances, indices = get_kNN(train_mat, test_mat, k=111)
+        test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
+                                                                                   test_df)
+        model = LogisticRegression(class_weight='balanced')
+        model.fit(train_feature_vector, y_train)
+
+        y_pred_train = model.predict(test_feature_vector)
+        performance_df.loc[ix] = [n_cluster,
+                                  balanced_accuracy_score(y_test, y_pred_train),
+                                  f1_score(y_test, y_pred_train),
+                                  precision_score(y_test, y_pred_train),
+                                  recall_score(y_test, y_pred_train),
+                                  recall_score(y_test, y_pred_train, pos_label=0)]
+
+        y_pred_train = model.predict(train_feature_vector)
+        self_performance_df.loc[ix] = [n_cluster,
+                                       balanced_accuracy_score(y_train, y_pred_train),
+                                       f1_score(y_train, y_pred_train),
+                                       precision_score(y_train, y_pred_train),
+                                       recall_score(y_train, y_pred_train),
+                                       recall_score(y_train, y_pred_train, pos_label=0)]
+
+    performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
+    plt.ylabel('classification performance')
+    plt.xlabel('number of clusters')
+    plt.title('{} classifier performance on test data using different spectral n'.format(sm_name))
+    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
+    plt.savefig('{}/{}_test_performance_spectral_n.png'.format(sm_name, sm_name))
+
+    self_performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
+    plt.ylabel('classification performance')
+    plt.xlabel('number of clusters')
+    plt.title('{} classifier performance on train data using spectral n'.format(sm_name))
+    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
+    plt.savefig('{}/{}_self_performance_spectral_n.png'.format(sm_name, sm_name))
+
+
+def gamma_main(sm_path, sm_name):
+    performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
+    self_performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
+
+    full_df = get_fasta_info()
+    full_A = get_am(sm_path, full=True)
+    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
+    full_D = similarities_to_distances(full_A)
+
+    red_A, reduced_df = exclude_class('FU', full_df, full_A)
+    red_D, _ = exclude_class('FU', full_df, full_D)
+
+    cv_splits = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
+    train_df, train_mat, y_train, test_df, test_mat, y_test = cv_splits[0]
+
+    train_graph = get_graph(train_mat)
+    train_D = similarities_to_distances(train_mat)
+
+    # red_mbed = get_embedding(red_D)
+    # train_mbed = get_embedding(train_D)
+
+    for ix, g in enumerate(
+            [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
+             1.18, 1.19, 1.2]):
+        train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g,
+                                                      affinity_mat=np.array([]),
+                                                      n_cluster=0,
+                                                      kind='leiden')
+
+        train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df,
+                                                                                     kind='relative')
+
+        distances, indices = get_kNN(train_mat, test_mat, k=111)
+        test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
+                                                                                   test_df)
+        model = LogisticRegression(class_weight='balanced')
+        model.fit(train_feature_vector, y_train)
+
+        y_pred_train = model.predict(test_feature_vector)
+        performance_df.loc[ix] = [n_cluster,
+                                  balanced_accuracy_score(y_test, y_pred_train),
+                                  f1_score(y_test, y_pred_train),
+                                  precision_score(y_test, y_pred_train),
+                                  recall_score(y_test, y_pred_train),
+                                  recall_score(y_test, y_pred_train, pos_label=0)]
+
+        y_pred_train = model.predict(train_feature_vector)
+        self_performance_df.loc[ix] = [n_cluster,
+                                       balanced_accuracy_score(y_train, y_pred_train),
+                                       f1_score(y_train, y_pred_train),
+                                       precision_score(y_train, y_pred_train),
+                                       recall_score(y_train, y_pred_train),
+                                       recall_score(y_train, y_pred_train, pos_label=0)]
+
+    performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
+    plt.ylabel('classification performance')
+    plt.xlabel('number of clusters')
+    plt.title('{} classifier performance on test data using different gammas'.format(sm_name))
+    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
+    plt.savefig('{}/{}_test_performance_gammas.png'.format(sm_name, sm_name))
+
+    self_performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
+    plt.ylabel('classification performance')
+    plt.xlabel('number of clusters')
+    plt.title('{} classifier performance on train data using different gammas'.format(sm_name))
+    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
+    plt.savefig('{}/{}_self_performance_gammas.png'.format(sm_name, sm_name))
+
+
 if __name__ == '__main__':
     os.environ['NUMEXPR_MAX_THREADS'] = '52'
     numexpr.set_num_threads(52)
@@ -593,6 +754,9 @@ if __name__ == '__main__':
     names = [('PAM70', pam70), ('BLOSUM45', b45), ('BLOSUM62', b62)]
 
     for name, path in names:
+        spectral_n_main(path, name)
+
+        """
         classification_main(sm_name=name, dm_path=path,
                             n_splits=5, test_size=0.2, k_=[0], g_=1,
                             class_label_to_exclude='FU',
@@ -600,3 +764,4 @@ if __name__ == '__main__':
                             plot_full_UMAP=False,
                             plot_excluded_class_UMAP=False,
                             plot_UMAP_w_clusters=False)
+        """
