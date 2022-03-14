@@ -25,7 +25,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import classification_report, f1_score, balanced_accuracy_score, precision_score, recall_score
-from sklearn.neighbors import NearestNeighbors
+from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 import matplotlib
 
 matplotlib.use('Agg')
@@ -93,6 +93,8 @@ def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2):
     sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size)
 
     for train_index, test_index in sss.split(patient_ids, response):
+        print('train:', train_index)
+        print('test:', test_index)
         train_index.sort()
         test_index.sort()
 
@@ -110,7 +112,7 @@ def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2):
 
         splits.append((train_df, train_mat, y_train, test_df, test_mat, y_test))
 
-    return splits
+    return splits, train_index, test_index
 
 
 path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
@@ -255,7 +257,7 @@ def exclude_class(class_label: str, df, A):
     return reduced_A, reduced_df
 
 
-def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
+def get_train_F(cluster_vector, df, kind='absolute'):
     if kind not in ['absolute', 'relative', 'freq']:
         raise ValueError('\'kind\' has to be either \'absolute\', \'relative\' or \'freq\'')
 
@@ -293,6 +295,44 @@ def get_feature_from_cluster(cluster_vector, df, kind='absolute'):
     return feature_vector, sequences_per_cluster
 
 
+def get_test_C(train_D, train_C, test_D, n_neighbors=111):
+    knn_clf = KNeighborsClassifier(n_neighbors=n_neighbors)
+    knn_clf.fit(train_D, train_C)
+
+    test_C = knn_clf.predict(test_D)
+
+    return test_C
+
+
+def get_test_F(test_C, test_df, n_cluster, kind='relative'):
+    patient_ids = np.unique([x[0] for x in test_df.index])
+    n = len(patient_ids)
+    test_F = np.zeros((n, n_cluster))
+    test_SPC = [[] for _ in range(n_cluster)]
+
+    for patient_ix, tag in enumerate(patient_ids):  # for every patient
+        ixs = [ix for ix, header in enumerate(test_df.index) if tag == header[0]]
+
+        patient_sequences = np.array(test_df.iloc[ixs]['sequence'].to_list())
+        patient_Vs = np.array(test_df.iloc[ixs]['v'].to_list())
+        patient_frequencies = np.array(test_df.iloc[ixs]['freq'].to_list()).astype(float)
+        patient_cluster = test_C[ixs]
+
+        for sequence, cluster, frequency, v in zip(patient_sequences, patient_cluster, patient_frequencies, patient_Vs):
+
+            if kind == 'relative' or kind == 'absolute':
+                test_F[patient_ix, cluster] += 1
+
+            test_SPC[cluster].append([tag[:2], tag[:-1], sequence, v])
+
+    if kind == 'relative':
+        test_F = test_F / test_F.sum(axis=0)
+
+    np.nan_to_num(test_F, copy=False)
+
+    return test_F, test_SPC
+
+
 def get_kNN(train_dm, test_dm, k=11):
     nn = NearestNeighbors(n_neighbors=k, metric='precomputed', algorithm='auto')
     nn.fit(train_dm)
@@ -300,7 +340,7 @@ def get_kNN(train_dm, test_dm, k=11):
     return dd, ii
 
 
-def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='absolute'):
+def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='relative'):
     # TODO adjust output so it can be visualized
     n_cluster = len(np.unique(train_cluster_vector))
 
@@ -470,34 +510,34 @@ def classification_main(sm_name,
             # print('Now starting {} clustering.'.format(cluster_kind))
 
             first_loop = True
-            for train_df, train_mat, y_train, test_df, test_mat, y_test in cv_splits:
+            for train_df, train_A, y_train, test_df, test_A, y_test in cv_splits:
                 print(len(train_df), len(test_df))
-                print(train_mat.shape, test_mat.shape)
+                print(train_A.shape, test_A.shape)
                 print(y_train, y_test)
 
                 if cluster_kind in ['louvain', 'leiden']:
-                    train_graph = get_graph(train_mat)
+                    train_graph = get_graph(train_A)
 
                 elif cluster_kind == 'spectral':
-                    eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(A, plot=plot_eigengap,
+                    eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(train_A, plot=plot_eigengap,
                                                                                  loc='/home/ubuntu/Enno/gammaDelta/{}/{}_spectral_eigengap.png'.format(sm_name, sm_name))
                     if n_sc_cluster > 100:
                         n_sc_cluster = 50
 
                 train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
-                                                              affinity_mat=train_mat,
+                                                              affinity_mat=train_A,
                                                               n_cluster=n_sc_cluster,
                                                               kind=cluster_kind)
 
                 if plot_UMAP_w_clusters:
-                    train_D = similarities_to_distances(train_mat)
+                    train_D = similarities_to_distances(train_A)
                     train_mbed = get_embedding(train_D)
                     plot_umap(train_mbed, train_cluster_vector, '{} - {} excluded'.format(sm_name, class_label_to_exclude),
                               loc='/home/ubuntu/Enno/gammaDelta/{}/{}_train_UMAP_w_{}.png'.format(sm_name, sm_name, cluster_kind))
 
                 # TODO kind iterator
-                train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df, kind='relative')
-                distances, indices = get_kNN(train_mat, test_mat, k=knn_clf_k)
+                train_feature_vector, train_sequences_per_cluster = get_train_F(train_cluster_vector, train_df, kind='relative')
+                distances, indices = get_kNN(train_A, test_A, k=knn_clf_k)
                 test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
                                                                                            test_df)
 
@@ -545,21 +585,21 @@ def classification_main(sm_name,
 def main():
     df = get_fasta_info()
     dm = get_am(path_to_am=b62, full=True)
-    train_df, train_dm, y_train, test_df, test_dm, y_test = get_matrix_train_test(df, dm)
-
+    split, train_I, test_I = get_matrix_train_test(df, dm)
+    train_df, train_dm, y_train, test_df, test_dm, y_test = split[0]
     embedding = get_embedding(train_dm)
 
-    train_g = get_graph(train_dm)
+    train_G = get_graph(train_dm)
 
-    train_cluster_vector, n_cluster = get_cluster(graph=train_g, gamma=1.1, kind='louvain')
+    train_C, n_cluster = get_cluster(graph=train_G, gamma=1.1, kind='louvain')
 
-    plot_umap(embedding, train_cluster_vector, 'UMAP', '')
+    plot_umap(embedding, train_C, 'UMAP', '')
 
-    train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df)
+    train_feature_vector, train_sequences_per_cluster = get_train_F(train_C, train_df)
 
     distances, indices = get_kNN(train_dm, test_dm, k=10)
 
-    test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector, test_df)
+    test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_C, test_df)
 
     make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
 
@@ -622,46 +662,45 @@ def spectral_n_main(sm_path, sm_name):
     red_A, reduced_df = exclude_class('FU', full_df, full_A)
     red_D, _ = exclude_class('FU', full_df, full_D)
 
-    cv_splits = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
-    train_df, train_mat, y_train, test_df, test_mat, y_test = cv_splits[0]
+    cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
+    train_df, train_A, train_Y, test_df, test_A, test_Y = cv_splits[0]
 
-    train_graph = get_graph(train_mat)
-    train_D = similarities_to_distances(train_mat)
+    test_D = similarities_to_distances(test_A)
+    train_D = similarities_to_distances(train_A)
 
     # red_mbed = get_embedding(red_D)
     # train_mbed = get_embedding(train_D)
 
     for ix, n_scluster in enumerate([3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000,  1250,  1500]):
         print(ix, n_scluster)
-        train_cluster_vector, n_cluster = get_cluster(graph=None, gamma=1,
-                                                      affinity_mat=train_mat,
+        train_C, n_cluster = get_cluster(graph=None, gamma=1,
+                                                      affinity_mat=train_A,
                                                       n_cluster=n_scluster,
                                                       kind='spectral')
 
-        train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df,
-                                                                                     kind='relative')
+        train_F, train_SPC = get_train_F(train_C, train_df, kind='relative')
 
-        distances, indices = get_kNN(train_mat, test_mat, k=111)
-        test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
-                                                                                   test_df)
+        test_C = get_test_C(train_D, train_C, test_D)
+        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind='relative')
+
         model = LogisticRegression(class_weight='balanced')
-        model.fit(train_feature_vector, y_train)
+        model.fit(train_F, train_Y)
 
-        y_pred_train = model.predict(test_feature_vector)
+        pred_Y = model.predict(test_F)
         performance_df.loc[ix] = [n_cluster,
-                                  balanced_accuracy_score(y_test, y_pred_train),
-                                  f1_score(y_test, y_pred_train),
-                                  precision_score(y_test, y_pred_train),
-                                  recall_score(y_test, y_pred_train),
-                                  recall_score(y_test, y_pred_train, pos_label=0)]
+                                  balanced_accuracy_score(test_Y, pred_Y),
+                                  f1_score(test_Y, pred_Y),
+                                  precision_score(test_Y, pred_Y),
+                                  recall_score(test_Y, pred_Y),
+                                  recall_score(test_Y, pred_Y, pos_label=0)]
 
-        y_pred_train = model.predict(train_feature_vector)
+        pred_Y = model.predict(train_F)
         self_performance_df.loc[ix] = [n_cluster,
-                                       balanced_accuracy_score(y_train, y_pred_train),
-                                       f1_score(y_train, y_pred_train),
-                                       precision_score(y_train, y_pred_train),
-                                       recall_score(y_train, y_pred_train),
-                                       recall_score(y_train, y_pred_train, pos_label=0)]
+                                       balanced_accuracy_score(train_Y, pred_Y),
+                                       f1_score(train_Y, pred_Y),
+                                       precision_score(train_Y, pred_Y),
+                                       recall_score(train_Y, pred_Y),
+                                       recall_score(train_Y, pred_Y, pos_label=0)]
 
     performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
     plt.ylabel('classification performance')
@@ -691,10 +730,11 @@ def gamma_main(sm_path, sm_name):
     red_D, _ = exclude_class('FU', full_df, full_D)
 
     cv_splits = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
-    train_df, train_mat, y_train, test_df, test_mat, y_test = cv_splits[0]
+    train_df, train_A, train_Y, test_df, test_A, test_Y = cv_splits[0]
 
-    train_graph = get_graph(train_mat)
-    train_D = similarities_to_distances(train_mat)
+    train_G = get_graph(train_A)
+    train_D = similarities_to_distances(train_A)
+    test_D = similarities_to_distances(test_A)
 
     # red_mbed = get_embedding(red_D)
     # train_mbed = get_embedding(train_D)
@@ -702,35 +742,34 @@ def gamma_main(sm_path, sm_name):
     for ix, g in enumerate(
             [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
              1.18, 1.19, 1.2]):
-        train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g,
+        train_C, n_cluster = get_cluster(graph=train_G, gamma=g,
                                                       affinity_mat=np.array([]),
                                                       n_cluster=0,
                                                       kind='leiden')
 
-        train_feature_vector, train_sequences_per_cluster = get_feature_from_cluster(train_cluster_vector, train_df,
-                                                                                     kind='relative')
+        train_F, train_SPC = get_train_F(train_C, train_df, kind='relative')
 
-        distances, indices = get_kNN(train_mat, test_mat, k=111)
-        test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
-                                                                                   test_df)
+        test_C = get_test_C(train_D, train_C, test_D)
+        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind='relative')
+
         model = LogisticRegression(class_weight='balanced')
-        model.fit(train_feature_vector, y_train)
+        model.fit(train_F, train_Y)
 
-        y_pred_train = model.predict(test_feature_vector)
+        pred_Y = model.predict(test_F)
         performance_df.loc[ix] = [n_cluster,
-                                  balanced_accuracy_score(y_test, y_pred_train),
-                                  f1_score(y_test, y_pred_train),
-                                  precision_score(y_test, y_pred_train),
-                                  recall_score(y_test, y_pred_train),
-                                  recall_score(y_test, y_pred_train, pos_label=0)]
+                                  balanced_accuracy_score(test_Y, pred_Y),
+                                  f1_score(test_Y, pred_Y),
+                                  precision_score(test_Y, pred_Y),
+                                  recall_score(test_Y, pred_Y),
+                                  recall_score(test_Y, pred_Y, pos_label=0)]
 
-        y_pred_train = model.predict(train_feature_vector)
+        pred_Y = model.predict(train_F)
         self_performance_df.loc[ix] = [n_cluster,
-                                       balanced_accuracy_score(y_train, y_pred_train),
-                                       f1_score(y_train, y_pred_train),
-                                       precision_score(y_train, y_pred_train),
-                                       recall_score(y_train, y_pred_train),
-                                       recall_score(y_train, y_pred_train, pos_label=0)]
+                                       balanced_accuracy_score(train_Y, pred_Y),
+                                       f1_score(train_Y, pred_Y),
+                                       precision_score(train_Y, pred_Y),
+                                       recall_score(train_Y, pred_Y),
+                                       recall_score(train_Y, pred_Y, pos_label=0)]
 
     performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
     plt.ylabel('classification performance')
@@ -755,13 +794,4 @@ if __name__ == '__main__':
 
     for name, path in names:
         spectral_n_main(path, name)
-
-        """
-        classification_main(sm_name=name, dm_path=path,
-                            n_splits=5, test_size=0.2, k_=[0], g_=1,
-                            class_label_to_exclude='FU',
-                            plot_eigengap=True,
-                            plot_full_UMAP=False,
-                            plot_excluded_class_UMAP=False,
-                            plot_UMAP_w_clusters=False)
-        """
+        gamma_main(path, name)
