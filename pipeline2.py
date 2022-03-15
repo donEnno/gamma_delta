@@ -650,7 +650,7 @@ def kNN_main():
         plt.show()
 
 
-def spectral_n_main(sm_path, sm_name):
+def spectral_n_main(sm_path, sm_name, kind):
     performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
     self_performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
 
@@ -678,10 +678,10 @@ def spectral_n_main(sm_path, sm_name):
                                                       n_cluster=n_scluster,
                                                       kind='spectral')
 
-        train_F, train_SPC = get_train_F(train_C, train_df, kind='relative')
+        train_F, train_SPC = get_train_F(train_C, train_df, kind=kind)
 
         test_C = get_test_C(train_D, train_C, test_D)
-        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind='relative')
+        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind=kind)
 
         model = LogisticRegression(class_weight='balanced')
         model.fit(train_F, train_Y)
@@ -717,7 +717,7 @@ def spectral_n_main(sm_path, sm_name):
     plt.savefig('{}/{}_self_performance_spectral_n.png'.format(sm_name, sm_name))
 
 
-def gamma_main(sm_path, sm_name):
+def gamma_main(sm_path, sm_name, kind):
     performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
     self_performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
 
@@ -729,7 +729,7 @@ def gamma_main(sm_path, sm_name):
     red_A, reduced_df = exclude_class('FU', full_df, full_A)
     red_D, _ = exclude_class('FU', full_df, full_D)
 
-    cv_splits = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
+    cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
     train_df, train_A, train_Y, test_df, test_A, test_Y = cv_splits[0]
 
     train_G = get_graph(train_A)
@@ -747,10 +747,10 @@ def gamma_main(sm_path, sm_name):
                                                       n_cluster=0,
                                                       kind='leiden')
 
-        train_F, train_SPC = get_train_F(train_C, train_df, kind='relative')
+        train_F, train_SPC = get_train_F(train_C, train_df, kind=kind)
 
         test_C = get_test_C(train_D, train_C, test_D)
-        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind='relative')
+        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind=kind)
 
         model = LogisticRegression(class_weight='balanced')
         model.fit(train_F, train_Y)
