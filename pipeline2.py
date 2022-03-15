@@ -793,5 +793,5 @@ if __name__ == '__main__':
     names = [('PAM70', pam70), ('BLOSUM45', b45), ('BLOSUM62', b62)]
 
     for name, path in names:
-        spectral_n_main(path, name)
-        gamma_main(path, name)
+        spectral_n_main(path, name, 'absolute')
+        gamma_main(path, name, 'absolute')
