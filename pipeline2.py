@@ -35,7 +35,6 @@ os.environ['NUMEXPR_MAX_THREADS'] = '52'
 path_to_dm = 'D:/enno/2022/hiwi/data/dm/pam/BLFUHD_PAM70_10_0.5_DM'
 path_to_data = '/home/ubuntu/Enno/gammaDelta/patient_data/all/'
 
-
 dm_root = '/home/ubuntu/Enno/mnt/volume/dm_in_use/'
 b45 = dm_root + 'BLFUHD_BLOSUM45_1_0.1_DM'
 b62 = dm_root + 'BLFUHD_BLOSUM62_10_0.5_DM'
@@ -72,7 +71,7 @@ def shift_similarities_to_zero(am):
 
 
 def f(x):
-    return 1/(x+1)
+    return 1 / (x + 1)
 
 
 def similarities_to_distances(am):
@@ -120,8 +119,10 @@ path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
 
 def get_fasta_info(file=path_to_fasta):
     fasta = list(SeqIO.parse(file, 'fasta'))
-    index = [(patient, seq_no) for [patient, seq_no, _, _, _], seq in [(record.id.split('_'), str(record.seq)) for record in fasta]]
-    data = [(seq, freq, count, trd_v) for [_, _, freq, count, trd_v], seq in [(record.id.split('_'), str(record.seq)) for record in fasta]]
+    index = [(patient, seq_no) for [patient, seq_no, _, _, _], seq in
+             [(record.id.split('_'), str(record.seq)) for record in fasta]]
+    data = [(seq, freq, count, trd_v) for [_, _, freq, count, trd_v], seq in
+            [(record.id.split('_'), str(record.seq)) for record in fasta]]
     multi_index = pd.MultiIndex.from_tuples(index, names=['patient', 'seq_no'])
 
     df = pd.DataFrame(data, index=multi_index, columns=['sequence', 'freq', 'count', 'v'])
@@ -141,7 +142,7 @@ def get_graph(dm):
             continue
         g.addEdge(nodeA, nodeB, weight)
 
-    print('The graph construction took %.3f s' % (time.time()-t0))
+    print('The graph construction took %.3f s' % (time.time() - t0))
 
     return g
 
@@ -230,7 +231,7 @@ def kNN_selection(mat, k_percent, kind='affinity'):
 
     rows = np.arange(n)[:, None]
     knn_mat[rows, top_ixs] = 0
-    print('kNN_selection (kind={}) for k_percent = {} took {:.2f}s'.format(kind, k_percent, time.time()-t0))
+    print('kNN_selection (kind={}) for k_percent = {} took {:.2f}s'.format(kind, k_percent, time.time() - t0))
     return knn_mat
 
 
@@ -405,7 +406,6 @@ def make_classification(train_feature, test_feature, train_response, test_respon
 
 
 def visualize_cluster_distributions(cluster_info, sm, ck):
-
     classes = ['HD', 'BL', 'FU']
 
     for cix, cluster in enumerate(cluster_info):
@@ -453,8 +453,8 @@ def classification_main(sm_name,
                         class_label_to_exclude=None,
                         k_=None, g_=None,
                         knn_clf_k=11,
-                        plot_eigengap=False, plot_full_UMAP=False, plot_excluded_class_UMAP=False, plot_UMAP_w_clusters=False):
-
+                        plot_eigengap=False, plot_full_UMAP=False, plot_excluded_class_UMAP=False,
+                        plot_UMAP_w_clusters=False):
     print('Starting run on {}'.format(sm_name))
 
     overall_results = []
@@ -467,7 +467,7 @@ def classification_main(sm_name,
 
     df = get_fasta_info()
     full_A = get_am(dm_path, full=True)
-    full_A = shift_similarities_to_zero(full_A)           # shifted affinity matrix A
+    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
     full_D = similarities_to_distances(full_A)
 
     print('Data acquired, shifted, and transformed.')
@@ -476,7 +476,7 @@ def classification_main(sm_name,
 
     if plot_full_UMAP:
         n, _ = full_D.shape
-        plot_umap(full_embedding, [1]*n, '{} - all sequences included'.format(sm_name),
+        plot_umap(full_embedding, [1] * n, '{} - all sequences included'.format(sm_name),
                   loc='{}_full_umap.png'.format(sm_name))
 
     if class_label_to_exclude:
@@ -489,7 +489,8 @@ def classification_main(sm_name,
             embedding = get_embedding(D)
             n, _ = D.shape
             plot_umap(embedding, [1] * n, '{} - {} excluded'.format(sm_name, class_label_to_exclude),
-                      loc='/home/ubuntu/Enno/gammaDelta/{}/{}_{}_excluded_umap.png'.format(sm_name, sm_name, class_label_to_exclude))
+                      loc='/home/ubuntu/Enno/gammaDelta/{}/{}_{}_excluded_umap.png'.format(sm_name, sm_name,
+                                                                                           class_label_to_exclude))
     else:
         A = full_A
         reduced_df = df
@@ -520,7 +521,8 @@ def classification_main(sm_name,
 
                 elif cluster_kind == 'spectral':
                     eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(train_A, plot=plot_eigengap,
-                                                                                 loc='/home/ubuntu/Enno/gammaDelta/{}/{}_spectral_eigengap.png'.format(sm_name, sm_name))
+                                                                                 loc='/home/ubuntu/Enno/gammaDelta/{}/{}_spectral_eigengap.png'.format(
+                                                                                     sm_name, sm_name))
                     if n_sc_cluster > 100:
                         n_sc_cluster = 50
 
@@ -532,13 +534,17 @@ def classification_main(sm_name,
                 if plot_UMAP_w_clusters:
                     train_D = similarities_to_distances(train_A)
                     train_mbed = get_embedding(train_D)
-                    plot_umap(train_mbed, train_cluster_vector, '{} - {} excluded'.format(sm_name, class_label_to_exclude),
-                              loc='/home/ubuntu/Enno/gammaDelta/{}/{}_train_UMAP_w_{}.png'.format(sm_name, sm_name, cluster_kind))
+                    plot_umap(train_mbed, train_cluster_vector,
+                              '{} - {} excluded'.format(sm_name, class_label_to_exclude),
+                              loc='/home/ubuntu/Enno/gammaDelta/{}/{}_train_UMAP_w_{}.png'.format(sm_name, sm_name,
+                                                                                                  cluster_kind))
 
                 # TODO kind iterator
-                train_feature_vector, train_sequences_per_cluster = get_train_F(train_cluster_vector, train_df, kind='relative')
+                train_feature_vector, train_sequences_per_cluster = get_train_F(train_cluster_vector, train_df,
+                                                                                kind='relative')
                 distances, indices = get_kNN(train_A, test_A, k=knn_clf_k)
-                test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_cluster_vector,
+                test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices,
+                                                                                           train_cluster_vector,
                                                                                            test_df)
 
                 if first_loop:
@@ -566,14 +572,15 @@ def classification_main(sm_name,
                                     average_cv_performance[3],
                                     average_cv_performance[4]])
 
-            overall_results.append([sm_name+' self', cluster_kind, n_cluster, k_percent,
+            overall_results.append([sm_name + ' self', cluster_kind, n_cluster, k_percent,
                                     average_cv_self_performance[0],
                                     average_cv_self_performance[1],
                                     average_cv_self_performance[2],
                                     average_cv_self_performance[3],
                                     average_cv_self_performance[4]])
 
-    result_df = pd.DataFrame(columns=['sm', 'cluster_kind', 'n_cluster', 'k_percent', 'f1', 'bal_acc', 'prec', 'sens', 'spec'])
+    result_df = pd.DataFrame(
+        columns=['sm', 'cluster_kind', 'n_cluster', 'k_percent', 'f1', 'bal_acc', 'prec', 'sens', 'spec'])
 
     for ix, result in enumerate(overall_results):
         result_df.loc[ix] = result
@@ -604,50 +611,167 @@ def main():
     make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
 
 
-def kNN_main():
+def kNN_main(sm_path, sm_name, cluster_kind):
+    # for-loop iterables
+    K = [x/10 for x in list(range(0, 3))]
+    N_SCLUSTER = [3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000, 1250, 1500]
+    GAMMAS = [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
+              1.18, 1.19, 1.2]
+    cluster_parameter_list = list(zip(N_SCLUSTER, GAMMAS))
 
-    df = get_fasta_info()
-    gamma = 1.11
+    # output variables
+    # What do we want?
+    # 1 Test Performance for every k
+    # 2 Train Performance for every k
+    # 3 ARI scores
+    # CK cluster kind, FK feature kind, NC number clusters, BA balanced accuracy, F1 F1 score, PR precision, SP specificity, SN sensitivity
+    performance = []
+    self_performance = []
+    ari = []
 
-    dm_paths = [(pam70, 'PAM70'), (b45, 'BLOSUM45'), (b62, 'BLOSUM62')]
-    for dm_path, sm_name in dm_paths:
-        gt_dm = get_am(path_to_am=dm_path, full=True)
-        train_df, gt_train_dm, y_train, test_df, test_dm, y_test = get_matrix_train_test(df, gt_dm)
-        gt_embedding = get_embedding(gt_train_dm)
+    full_df = get_fasta_info()
+    full_A = get_am(sm_path, full=True)
+    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
+    full_D = similarities_to_distances(full_A)
 
-        gt_g = get_graph(gt_train_dm)
-        gt_cluster_vector, gt_n_cluster = get_cluster(graph=gt_g, gamma=gamma, kind='louvain')
-        plot_umap(gt_embedding, gt_cluster_vector, '', '')
+    full_A, reduced_df = exclude_class('FU', full_df, full_A)
+    full_D, _ = exclude_class('FU', full_df, full_D)
 
-        adjusted_rand_scores, n_clusters = [], []
+    full_G = get_graph(full_A)
 
-        k_percents = np.linspace(0, 1, 21)[1:-1]
-        for k_percent in k_percents:
-            kNN_dm = kNN_selection(gt_train_dm, k_percent)
+    for n_s_cluster, gamma in cluster_parameter_list:
+        full_spectral_C, n_full_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster, affinity_mat=full_A,
+                                                       kind='spectral')
+        full_leiden_C, n_full_leiden = get_cluster(graph=full_G, gamma=gamma, n_cluster=0, affinity_mat=np.array([]),
+                                                   kind='leiden')
 
-            kNN_embedding = get_embedding(kNN_dm)
-            kNN_g = get_graph(kNN_dm)
-            kNN_cluster_vector, kNN_n_cluster = get_cluster(graph=kNN_g, gamma=gamma, kind='louvain')
+        for k_ in K:
+            kNN_A = kNN_selection(full_A, k_, kind='affinity')
+            kNN_D = shift_similarities_to_zero(kNN_A)
+            kNN_G = get_graph(kNN_A)
 
-            plot_umap(kNN_embedding, kNN_cluster_vector, 'kNN embedding with lowest {}% pruned'.format(k_percent*100), '')
-            plot_umap(gt_embedding, kNN_cluster_vector, 'kNN clusters in gt_embedding', '')
+            kNN_full_spectral_C, n_kNN_full_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster,
+                                                                   affinity_mat=kNN_A, kind='spectral')
+            kNN_full_leiden_C, n_kNN_full_leiden = get_cluster(graph=kNN_G, gamma=gamma, n_cluster=0,
+                                                               affinity_mat=np.array([]), kind='leiden')
 
-            adjusted_rand_scores.append(adjusted_rand_score(gt_cluster_vector, kNN_cluster_vector))
-            n_clusters.append(kNN_n_cluster)
+            cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=kNN_A, n_splits=1, test_size=0.2)
+            train_df, kNN_train_A, train_Y, test_df, kNN_test_A, test_Y = cv_splits[0]
 
-        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(25, 15))
+            kNN_train_D = similarities_to_distances(kNN_train_A)
+            kNN_test_D = similarities_to_distances(kNN_test_A)
+            kNN_train_G = get_graph(kNN_train_A)
 
-        ax[0].plot(k_percents, n_clusters)
-        ax[0].set_title('{}: n_clusters vs k_percents'.format(sm_name))
-        ax[0].set_xlabel('lowest k% pruned')
-        ax[0].set_ylabel('n_clusters')
+            # spectral and leiden cluster vectors
+            kNN_train_spectral_C, n_kNN_train_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster,
+                                                                     affinity_mat=kNN_train_A, kind='spectral')
+            kNN_train_leiden_C, n_kNN_train_leiden = get_cluster(graph=kNN_train_G, gamma=gamma, n_cluster=0,
+                                                                 affinity_mat=np.array([]), kind='leiden')
 
-        ax[1].plot(k_percents, adjusted_rand_scores)
-        ax[1].set_title('{}: ARI vs k_percents'.format(sm_name))
-        ax[1].set_xlabel('lowest k% pruned')
-        ax[1].set_ylabel('ARI')
+            # spectral and leiden relative
+            kNN_train_spectral_F_rel, _ = get_train_F(kNN_train_spectral_C, train_df, kind='relative')
+            kNN_train_leiden_F_rel, _ = get_train_F(kNN_train_leiden_C, train_df, kind='relative')
 
-        plt.show()
+            kNN_test_spectral_C_rel = get_test_C(kNN_train_D, kNN_train_spectral_C, kNN_test_D)
+            kNN_test_leiden_C_rel = get_test_C(kNN_train_D, kNN_train_leiden_C, kNN_test_D)
+
+            kNN_test_spectral_F_rel, _ = get_test_F(kNN_test_spectral_C_rel, test_df, n_kNN_train_spectral,
+                                                    kind='relative')
+            kNN_test_leiden_F_rel, _ = get_test_F(kNN_test_leiden_C_rel, test_df, n_kNN_train_leiden, kind='relative')
+
+            # spectral and leiden absolute
+            kNN_train_spectral_F_abs, _ = get_train_F(kNN_train_spectral_C, train_df, kind='absolute')
+            kNN_train_leiden_F_abs, _ = get_train_F(kNN_train_leiden_C, train_df, kind='absolute')
+
+            kNN_test_spectral_C_abs = get_test_C(kNN_train_D, kNN_train_spectral_C, kNN_test_D)
+            kNN_test_leiden_C_abs = get_test_C(kNN_train_D, kNN_train_leiden_C, kNN_test_D)
+
+            kNN_test_spectral_F_abs, _ = get_test_F(kNN_test_spectral_C_abs, test_df, n_kNN_train_spectral,
+                                                    kind='absolute')
+            kNN_test_leiden_F_abs, _ = get_test_F(kNN_test_leiden_C_abs, test_df, n_kNN_train_leiden, kind='absolute')
+
+            # classification
+            model = LogisticRegression(class_weight='balanced')
+
+            # spectral relative and absolute
+            model.fit(kNN_train_spectral_F_abs, train_Y)
+            kNN_spectral_pred_Y_abs_self = model.predict(kNN_train_spectral_F_abs)
+            kNN_spectral_pred_Y_abs = model.predict(kNN_test_spectral_F_abs)
+
+            model.fit(kNN_train_spectral_F_rel, train_Y)
+            kNN_spectral_pred_Y_rel_self = model.predict(kNN_train_spectral_F_rel)
+            kNN_spectral_pred_Y_rel = model.predict(kNN_test_spectral_F_rel)
+
+            # leiden relative and absolute
+            model.fit(kNN_train_leiden_F_abs, train_Y)
+            kNN_leiden_pred_Y_abs_self = model.predict(kNN_train_leiden_F_abs)
+            kNN_leiden_pred_Y_abs = model.predict(kNN_test_leiden_F_abs)
+
+            model.fit(kNN_train_leiden_F_rel, train_Y)
+            kNN_leiden_pred_Y_rel_self = model.predict(kNN_train_leiden_F_rel)
+            kNN_leiden_pred_Y_rel = model.predict(kNN_test_leiden_F_rel)
+
+            test_Ys = [kNN_spectral_pred_Y_abs, kNN_spectral_pred_Y_rel, kNN_leiden_pred_Y_rel, kNN_leiden_pred_Y_abs]
+            test_Ys_self = [kNN_spectral_pred_Y_abs_self, kNN_spectral_pred_Y_rel_self, kNN_leiden_pred_Y_rel_self,
+                            kNN_leiden_pred_Y_abs_self]
+            N = [n_kNN_train_spectral, n_kNN_train_spectral, n_kNN_train_leiden, n_kNN_train_leiden]
+            kinds_C = ['spectral', 'spectral', 'leiden', 'leiden']
+            kinds_F = ['abs', 'rel', 'abs', 'rel']
+
+            for pred_Y, pred_Y_self, n, ck, fk in zip(test_Ys, test_Ys_self, N, kinds_C, kinds_F):
+                entry = ['test', k_, ck, fk, n,
+                         balanced_accuracy_score(test_Y, pred_Y),
+                         f1_score(test_Y, pred_Y),
+                         precision_score(test_Y, pred_Y),
+                         recall_score(test_Y, pred_Y),
+                         recall_score(test_Y, pred_Y, pos_label=0)]
+                performance.append(entry)
+
+                entry_self = ['train', k_, ck, fk, n,
+                              balanced_accuracy_score(train_Y, pred_Y_self),
+                              f1_score(train_Y, pred_Y_self),
+                              precision_score(train_Y, pred_Y_self),
+                              recall_score(train_Y, pred_Y_self),
+                              recall_score(train_Y, pred_Y_self, pos_label=0)]
+                self_performance.append(entry_self)
+
+            # adjusted rand index
+            full_P = np.unique([x[0] for x in reduced_df.index])
+            train_P = full_P[train_I]
+            test_P = full_P[test_I]
+
+            train_SI = [get_patient_indices(PID, reduced_df) for PID in train_P]
+            train_SI_flat = [ix for sublist in train_SI for ix in sublist]
+
+            test_SI = [get_patient_indices(PID, reduced_df) for PID in test_P]
+            test_SI_flat = [ix for sublist in test_SI for ix in sublist]
+
+            joined_SI = np.concatenate((train_SI_flat, test_SI_flat))
+            first_Cs = [kNN_train_spectral_C, kNN_train_spectral_C, kNN_train_leiden_C, kNN_train_leiden_C]
+            second_Cs = [kNN_test_spectral_C_abs, kNN_test_spectral_C_rel, kNN_test_leiden_C_abs, kNN_test_leiden_C_rel]
+
+            for C1, C2, ck, fk in zip(first_Cs, second_Cs, kinds_C, kinds_F):
+                joined_C = np.concatenate((C1, C2), axis=None)
+                ordered_joined_C = np.zeros(len(joined_C))
+
+                for ix, c in zip(joined_SI, joined_C):
+                    ordered_joined_C[ix] = c
+
+                if ck == 'spectral':
+                    ari.append([ck, fk, k_, adjusted_rand_score(full_spectral_C, ordered_joined_C), adjusted_rand_score(kNN_full_spectral_C, ordered_joined_C)])
+                if ck == 'leiden':
+                    ari.append([ck, fk, k_, adjusted_rand_score(full_leiden_C, ordered_joined_C), adjusted_rand_score(kNN_full_leiden_C, ordered_joined_C)])
+
+            ari.append(['FULL', 'FULL', k_, adjusted_rand_score(full_spectral_C, kNN_full_spectral_C), adjusted_rand_score(full_leiden_C, kNN_full_leiden_C)])
+
+    # results to file
+    performance_df = pd.DataFrame(performance, columns=['TYPE', 'K', 'CK', 'FK', 'NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
+    self_performance_df = pd.DataFrame(self_performance, columns=['TYPE', 'K', 'CK', 'FK', 'NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
+    ari_df = pd.DataFrame(ari, columns=['CK', 'FK', 'K', 'FvJ', 'KvJ'])
+
+    performance_df.to_csv('{}/{}_k_run_test_performance.csv'.format(sm_name, sm_name))
+    self_performance_df.to_csv('{}/{}_k_run_train_performance.csv'.format(sm_name, sm_name))
+    ari_df.to_csv('{}/{}_k_run_ari.csv'.format(sm_name, sm_name))
 
 
 def spectral_n_main(sm_path, sm_name, kind):
@@ -671,12 +795,13 @@ def spectral_n_main(sm_path, sm_name, kind):
     # red_mbed = get_embedding(red_D)
     # train_mbed = get_embedding(train_D)
 
-    for ix, n_scluster in enumerate([3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000,  1250,  1500]):
+    for ix, n_scluster in enumerate(
+            [3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000, 1250, 1500]):
         print(ix, n_scluster)
         train_C, n_cluster = get_cluster(graph=None, gamma=1,
-                                                      affinity_mat=train_A,
-                                                      n_cluster=n_scluster,
-                                                      kind='spectral')
+                                         affinity_mat=train_A,
+                                         n_cluster=n_scluster,
+                                         kind='spectral')
 
         train_F, train_SPC = get_train_F(train_C, train_df, kind=kind)
 
@@ -743,9 +868,9 @@ def gamma_main(sm_path, sm_name, kind):
             [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
              1.18, 1.19, 1.2]):
         train_C, n_cluster = get_cluster(graph=train_G, gamma=g,
-                                                      affinity_mat=np.array([]),
-                                                      n_cluster=0,
-                                                      kind='leiden')
+                                         affinity_mat=np.array([]),
+                                         n_cluster=0,
+                                         kind='leiden')
 
         train_F, train_SPC = get_train_F(train_C, train_df, kind=kind)
 
@@ -790,8 +915,11 @@ if __name__ == '__main__':
     os.environ['NUMEXPR_MAX_THREADS'] = '52'
     numexpr.set_num_threads(52)
 
-    names = [('PAM70', pam70), ('BLOSUM45', b45), ('BLOSUM62', b62)]
+    names = [('BLOSUM45', b45)]
 
     for name, path in names:
-        spectral_n_main(path, name, 'absolute')
-        gamma_main(path, name, 'absolute')
+        print('Let\'s go', name)
+        kNN_main(path, name, 'absolute')
+        # gamma_main(path, name, 'absolute')
+
+    print(name, ' done.')
