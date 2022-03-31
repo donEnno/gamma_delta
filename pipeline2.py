@@ -231,6 +231,7 @@ def kNN_selection(mat, k_percent, kind='affinity'):
 
     rows = np.arange(n)[:, None]
     knn_mat[rows, top_ixs] = 0
+    knn_mat[top_ixs, rows] = 0
     print('kNN_selection (kind={}) for k_percent = {} took {:.2f}s'.format(kind, k_percent, time.time() - t0))
     return knn_mat
 
@@ -611,13 +612,14 @@ def main():
     make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
 
 
-def kNN_main(sm_path, sm_name, cluster_kind):
+def kNN_main(sm_path, sm_name):
     # for-loop iterables
-    K = [x/10 for x in list(range(0, 3))]
-    N_SCLUSTER = [3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000, 1250, 1500]
-    GAMMAS = [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
-              1.18, 1.19, 1.2]
-    cluster_parameter_list = list(zip(N_SCLUSTER, GAMMAS))
+    K = [x/10 for x in list(range(3, 10))]
+    N_SCLUSTER = np.geomspace(5, 500, 20).astype(int)
+    # [3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000, 1250, 1500]
+    # GAMMAS = [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
+    #           1.18, 1.19, 1.2]
+    # cluster_parameter_list = list(zip(N_SCLUSTER, GAMMAS))
 
     # output variables
     # What do we want?
@@ -637,61 +639,61 @@ def kNN_main(sm_path, sm_name, cluster_kind):
     full_A, reduced_df = exclude_class('FU', full_df, full_A)
     full_D, _ = exclude_class('FU', full_df, full_D)
 
-    full_G = get_graph(full_A)
+    # full_G = get_graph(full_A)
 
-    for n_s_cluster, gamma in cluster_parameter_list:
+    for n_s_cluster in N_SCLUSTER:  # , gamma
         full_spectral_C, n_full_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster, affinity_mat=full_A,
                                                        kind='spectral')
-        full_leiden_C, n_full_leiden = get_cluster(graph=full_G, gamma=gamma, n_cluster=0, affinity_mat=np.array([]),
-                                                   kind='leiden')
+        # full_leiden_C, n_full_leiden = get_cluster(graph=full_G, gamma=gamma, n_cluster=0, affinity_mat=np.array([]),
+        #                                            kind='leiden')
 
         for k_ in K:
             kNN_A = kNN_selection(full_A, k_, kind='affinity')
             kNN_D = shift_similarities_to_zero(kNN_A)
-            kNN_G = get_graph(kNN_A)
+            # kNN_G = get_graph(kNN_A)
 
             kNN_full_spectral_C, n_kNN_full_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster,
                                                                    affinity_mat=kNN_A, kind='spectral')
-            kNN_full_leiden_C, n_kNN_full_leiden = get_cluster(graph=kNN_G, gamma=gamma, n_cluster=0,
-                                                               affinity_mat=np.array([]), kind='leiden')
+            # kNN_full_leiden_C, n_kNN_full_leiden = get_cluster(graph=kNN_G, gamma=gamma, n_cluster=0,
+            #                                                    affinity_mat=np.array([]), kind='leiden')
 
             cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=kNN_A, n_splits=1, test_size=0.2)
             train_df, kNN_train_A, train_Y, test_df, kNN_test_A, test_Y = cv_splits[0]
 
             kNN_train_D = similarities_to_distances(kNN_train_A)
             kNN_test_D = similarities_to_distances(kNN_test_A)
-            kNN_train_G = get_graph(kNN_train_A)
+            # kNN_train_G = get_graph(kNN_train_A)
 
             # spectral and leiden cluster vectors
             kNN_train_spectral_C, n_kNN_train_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster,
                                                                      affinity_mat=kNN_train_A, kind='spectral')
-            kNN_train_leiden_C, n_kNN_train_leiden = get_cluster(graph=kNN_train_G, gamma=gamma, n_cluster=0,
-                                                                 affinity_mat=np.array([]), kind='leiden')
+            # kNN_train_leiden_C, n_kNN_train_leiden = get_cluster(graph=kNN_train_G, gamma=gamma, n_cluster=0,
+            #                                                      affinity_mat=np.array([]), kind='leiden')
 
             # spectral and leiden relative
             kNN_train_spectral_F_rel, _ = get_train_F(kNN_train_spectral_C, train_df, kind='relative')
-            kNN_train_leiden_F_rel, _ = get_train_F(kNN_train_leiden_C, train_df, kind='relative')
+            # kNN_train_leiden_F_rel, _ = get_train_F(kNN_train_leiden_C, train_df, kind='relative')
 
             kNN_test_spectral_C_rel = get_test_C(kNN_train_D, kNN_train_spectral_C, kNN_test_D)
-            kNN_test_leiden_C_rel = get_test_C(kNN_train_D, kNN_train_leiden_C, kNN_test_D)
+            # kNN_test_leiden_C_rel = get_test_C(kNN_train_D, kNN_train_leiden_C, kNN_test_D)
 
             kNN_test_spectral_F_rel, _ = get_test_F(kNN_test_spectral_C_rel, test_df, n_kNN_train_spectral,
                                                     kind='relative')
-            kNN_test_leiden_F_rel, _ = get_test_F(kNN_test_leiden_C_rel, test_df, n_kNN_train_leiden, kind='relative')
+            # kNN_test_leiden_F_rel, _ = get_test_F(kNN_test_leiden_C_rel, test_df, n_kNN_train_leiden, kind='relative')
 
             # spectral and leiden absolute
             kNN_train_spectral_F_abs, _ = get_train_F(kNN_train_spectral_C, train_df, kind='absolute')
-            kNN_train_leiden_F_abs, _ = get_train_F(kNN_train_leiden_C, train_df, kind='absolute')
+            # kNN_train_leiden_F_abs, _ = get_train_F(kNN_train_leiden_C, train_df, kind='absolute')
 
             kNN_test_spectral_C_abs = get_test_C(kNN_train_D, kNN_train_spectral_C, kNN_test_D)
-            kNN_test_leiden_C_abs = get_test_C(kNN_train_D, kNN_train_leiden_C, kNN_test_D)
+            # kNN_test_leiden_C_abs = get_test_C(kNN_train_D, kNN_train_leiden_C, kNN_test_D)
 
             kNN_test_spectral_F_abs, _ = get_test_F(kNN_test_spectral_C_abs, test_df, n_kNN_train_spectral,
                                                     kind='absolute')
-            kNN_test_leiden_F_abs, _ = get_test_F(kNN_test_leiden_C_abs, test_df, n_kNN_train_leiden, kind='absolute')
+            # kNN_test_leiden_F_abs, _ = get_test_F(kNN_test_leiden_C_abs, test_df, n_kNN_train_leiden, kind='absolute')
 
             # classification
-            model = LogisticRegression(class_weight='balanced')
+            model = LogisticRegression(class_weight='balanced', max_iter=50000)
 
             # spectral relative and absolute
             model.fit(kNN_train_spectral_F_abs, train_Y)
@@ -703,20 +705,19 @@ def kNN_main(sm_path, sm_name, cluster_kind):
             kNN_spectral_pred_Y_rel = model.predict(kNN_test_spectral_F_rel)
 
             # leiden relative and absolute
-            model.fit(kNN_train_leiden_F_abs, train_Y)
-            kNN_leiden_pred_Y_abs_self = model.predict(kNN_train_leiden_F_abs)
-            kNN_leiden_pred_Y_abs = model.predict(kNN_test_leiden_F_abs)
+            # model.fit(kNN_train_leiden_F_abs, train_Y)
+            # kNN_leiden_pred_Y_abs_self = model.predict(kNN_train_leiden_F_abs)
+            # kNN_leiden_pred_Y_abs = model.predict(kNN_test_leiden_F_abs)
 
-            model.fit(kNN_train_leiden_F_rel, train_Y)
-            kNN_leiden_pred_Y_rel_self = model.predict(kNN_train_leiden_F_rel)
-            kNN_leiden_pred_Y_rel = model.predict(kNN_test_leiden_F_rel)
+            # model.fit(kNN_train_leiden_F_rel, train_Y)
+            # kNN_leiden_pred_Y_rel_self = model.predict(kNN_train_leiden_F_rel)
+            # kNN_leiden_pred_Y_rel = model.predict(kNN_test_leiden_F_rel)
 
-            test_Ys = [kNN_spectral_pred_Y_abs, kNN_spectral_pred_Y_rel, kNN_leiden_pred_Y_rel, kNN_leiden_pred_Y_abs]
-            test_Ys_self = [kNN_spectral_pred_Y_abs_self, kNN_spectral_pred_Y_rel_self, kNN_leiden_pred_Y_rel_self,
-                            kNN_leiden_pred_Y_abs_self]
-            N = [n_kNN_train_spectral, n_kNN_train_spectral, n_kNN_train_leiden, n_kNN_train_leiden]
-            kinds_C = ['spectral', 'spectral', 'leiden', 'leiden']
-            kinds_F = ['abs', 'rel', 'abs', 'rel']
+            test_Ys = [kNN_spectral_pred_Y_abs, kNN_spectral_pred_Y_rel]  # , kNN_leiden_pred_Y_rel, kNN_leiden_pred_Y_abs
+            test_Ys_self = [kNN_spectral_pred_Y_abs_self, kNN_spectral_pred_Y_rel_self]  # , kNN_leiden_pred_Y_rel_self, kNN_leiden_pred_Y_abs_self
+            N = [n_kNN_train_spectral, n_kNN_train_spectral]  # n_kNN_train_leiden, n_kNN_train_leiden
+            kinds_C = ['spectral', 'spectral']  # , 'leiden', 'leiden'
+            kinds_F = ['abs', 'rel']  # , 'abs', 'rel'
 
             for pred_Y, pred_Y_self, n, ck, fk in zip(test_Ys, test_Ys_self, N, kinds_C, kinds_F):
                 entry = ['test', k_, ck, fk, n,
@@ -747,8 +748,8 @@ def kNN_main(sm_path, sm_name, cluster_kind):
             test_SI_flat = [ix for sublist in test_SI for ix in sublist]
 
             joined_SI = np.concatenate((train_SI_flat, test_SI_flat))
-            first_Cs = [kNN_train_spectral_C, kNN_train_spectral_C, kNN_train_leiden_C, kNN_train_leiden_C]
-            second_Cs = [kNN_test_spectral_C_abs, kNN_test_spectral_C_rel, kNN_test_leiden_C_abs, kNN_test_leiden_C_rel]
+            first_Cs = [kNN_train_spectral_C, kNN_train_spectral_C]  # , kNN_train_leiden_C, kNN_train_leiden_C
+            second_Cs = [kNN_test_spectral_C_abs, kNN_test_spectral_C_rel]  # , kNN_test_leiden_C_abs, kNN_test_leiden_C_rel
 
             for C1, C2, ck, fk in zip(first_Cs, second_Cs, kinds_C, kinds_F):
                 joined_C = np.concatenate((C1, C2), axis=None)
@@ -759,10 +760,10 @@ def kNN_main(sm_path, sm_name, cluster_kind):
 
                 if ck == 'spectral':
                     ari.append([ck, fk, k_, adjusted_rand_score(full_spectral_C, ordered_joined_C), adjusted_rand_score(kNN_full_spectral_C, ordered_joined_C)])
-                if ck == 'leiden':
-                    ari.append([ck, fk, k_, adjusted_rand_score(full_leiden_C, ordered_joined_C), adjusted_rand_score(kNN_full_leiden_C, ordered_joined_C)])
+                # if ck == 'leiden':
+                #     ari.append([ck, fk, k_, adjusted_rand_score(full_leiden_C, ordered_joined_C), adjusted_rand_score(kNN_full_leiden_C, ordered_joined_C)])
 
-            ari.append(['FULL', 'FULL', k_, adjusted_rand_score(full_spectral_C, kNN_full_spectral_C), adjusted_rand_score(full_leiden_C, kNN_full_leiden_C)])
+            ari.append(['FULL', 'FULL', k_, adjusted_rand_score(full_spectral_C, kNN_full_spectral_C), adjusted_rand_score(full_spectral_C, kNN_full_spectral_C)])  # , adjusted_rand_score(full_leiden_C, kNN_full_leiden_C)
 
     # results to file
     performance_df = pd.DataFrame(performance, columns=['TYPE', 'K', 'CK', 'FK', 'NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
@@ -912,14 +913,17 @@ def gamma_main(sm_path, sm_name, kind):
 
 
 if __name__ == '__main__':
+    t0 = time.time()
     os.environ['NUMEXPR_MAX_THREADS'] = '52'
     numexpr.set_num_threads(52)
 
-    names = [('BLOSUM45', b45)]
+    names = [('PAM70', pam70)]
 
     for name, path in names:
         print('Let\'s go', name)
-        kNN_main(path, name, 'absolute')
+        kNN_main(path, name)
         # gamma_main(path, name, 'absolute')
 
+    time_passed = (time.time() - t0) / 3600
+    print('Time passed {:.2f}h'.format(time_passed))
     print(name, ' done.')
