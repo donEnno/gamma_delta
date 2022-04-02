@@ -3,23 +3,17 @@ import time
 import os
 import joblib
 import numexpr
-from collections import Counter
 import numpy as np
 import pandas as pd
 from statistics import mode
-
 from Bio import SeqIO, AlignIO
 from Bio.Align import AlignInfo
-
 import networkit
 from networkit.community import ParallelLeiden, PLM
-
 import umap
 import umap.plot
-
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-
 from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.linear_model import LogisticRegression
 from sklearn.cluster import SpectralClustering
@@ -28,20 +22,28 @@ from sklearn.metrics import classification_report, f1_score, balanced_accuracy_s
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 import matplotlib
 
+# global parameters
 matplotlib.use('Agg')
-
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
 
+# global paths
 path_to_dm = 'D:/enno/2022/hiwi/data/dm/pam/BLFUHD_PAM70_10_0.5_DM'
 path_to_data = '/home/ubuntu/Enno/gammaDelta/patient_data/all/'
-
+path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
 dm_root = '/home/ubuntu/Enno/mnt/volume/dm_in_use/'
+
+# substitution matrices
 b45 = dm_root + 'BLFUHD_BLOSUM45_1_0.1_DM'
 b62 = dm_root + 'BLFUHD_BLOSUM62_10_0.5_DM'
-pam70 = "/home/ubuntu/Enno/mnt/volume/dm_in_use/BLFUHD_PAM70_1_0.1_DM"
+pam70 = dm_root + 'BLFUHD_PAM70_1_0.1_DM'
 
 
 def write_fasta():
+    """
+    Reads all sequences from raw .txt files and writes them to .fasta file format with the following header
+    format: >COHORTE_#PATIENT_sequence-_#SEQUENCE_SEQ-FREQ_SEQ-COUNT_-SEQ-TRDV.
+    This way the headers are easily converted to a dataframe.
+    """
     with open(path_to_fasta, 'w') as dummy_file:
         for raw_file, prefix, pat_no in zip(os.listdir(path_to_data),
                                             66 * ['BL'] + 55 * ['FU'] + 29 * ['HD'],
@@ -56,6 +58,11 @@ def write_fasta():
 
 
 def get_am(path_to_am='dummy_dm', full=False):
+    """
+    :param path_to_am:
+    :param full: Set True to obtain full symmetric AM.
+    :return: AM
+    """
     am = joblib.load(path_to_am)
     if full:
         am = (am + am.T)
@@ -64,6 +71,10 @@ def get_am(path_to_am='dummy_dm', full=False):
 
 
 def shift_similarities_to_zero(am):
+    """
+    :param am:
+    :return: Initial AM but values are shifted to zero to avoid negative affinities.
+    """
     minimum = am.min()
     am = am - minimum
     np.fill_diagonal(am, 0)
@@ -71,10 +82,20 @@ def shift_similarities_to_zero(am):
 
 
 def f(x):
+    """
+    Affinity to distance transformation.
+    :param x:
+    :return: distance
+    """
     return 1 / (x + 1)
 
 
 def similarities_to_distances(am):
+    """
+    Converts input AM to DM.
+    :param am: DM
+    :return:
+    """
     am = shift_similarities_to_zero(am)
     f_vec = np.vectorize(f)
     distance_matrix = f_vec(am)
@@ -84,7 +105,19 @@ def similarities_to_distances(am):
 
 
 def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2):
+    """
+
+    :param df: Dataframe that supports the data.
+    :param mat: Matrix to split on.
+    :param n_splits:
+    :param test_size:
+    :return: splits: Splits of the supporting dataframe, matrix, and repsonse.
+             train_indices: Indices of patients to train on.
+             test_indices: Indices of patients to test on.
+    """
     splits = []
+    train_indices = []
+    test_indices = []
 
     patient_ids = np.unique([x[0] for x in df.index])
     response = np.array([1 if 'BL' in patient or 'FU' in patient else 0 for patient in patient_ids])
@@ -110,14 +143,18 @@ def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2):
         test_df = df.iloc[test_ixs]
 
         splits.append((train_df, train_mat, y_train, test_df, test_mat, y_test))
+        train_indices.append(train_index)
+        test_indices.append(test_index)
 
-    return splits, train_index, test_index
-
-
-path_to_fasta = '/home/ubuntu/Enno/gammaDelta/patient_data/blfuhd.fasta'
+    return splits, train_indices, test_indices
 
 
 def get_fasta_info(file=path_to_fasta):
+    """
+    Reads .fasta file and recovers a dataframe from it.
+    :param file:
+    :return: dataframe
+    """
     fasta = list(SeqIO.parse(file, 'fasta'))
     index = [(patient, seq_no) for [patient, seq_no, _, _, _], seq in
              [(record.id.split('_'), str(record.seq)) for record in fasta]]
@@ -131,6 +168,11 @@ def get_fasta_info(file=path_to_fasta):
 
 
 def get_graph(dm):
+    """
+    Builds a networkit graph from the input.
+    :param dm:
+    :return: networkit graph
+    """
     t0 = time.time()
     m, _ = dm.shape
     g = networkit.Graph(m, weighted=True)
@@ -148,12 +190,25 @@ def get_graph(dm):
 
 
 def get_embedding(data):
+    """
+    Data is an AM that is porcessed by UMAP.
+    :param data:
+    :return: UMAP embedding of the data.
+    """
     reducer = umap.UMAP(metric='precomputed').fit_transform(data)
 
     return reducer
 
 
-def eigengap_heuristic(am, plot, loc):
+def eigengap_heuristic(am, plot, plot_path):
+    """
+    Computes the eigenap of the AM as stated in
+    https://www.tml.cs.uni-tuebingen.de/team/luxburg/publications/Luxburg07_tutorial.pdf.
+    :param am:
+    :param plot: True if eigengap should be plotted.
+    :param plot_path:
+    :return: Number of clusters to use for spectral clustering as suggested by the eigengap theory.
+    """
     n, _ = am.shape
     identity = np.identity(n)
 
@@ -167,7 +222,7 @@ def eigengap_heuristic(am, plot, loc):
     if plot:
         plt.title('Largest eigen values of input matrix')
         plt.scatter(np.arange(len(eigenvalues)), eigenvalues, s=1)
-        plt.savefig(loc)
+        plt.savefig(plot_path)
         # plt.show()
         plt.clf()
 
@@ -178,6 +233,15 @@ def eigengap_heuristic(am, plot, loc):
 
 
 def get_cluster(graph=None, gamma=1.0, n_cluster=4, affinity_mat=np.array([]), kind='louvain'):
+    """
+    Perform clustering dependend on input params.
+    :param graph: obligatory if kind='leiden' or 'louvain'
+    :param gamma: obligatory if kind='leiden' or 'louvain'
+    :param n_cluster: obligatory if kind='spectral'
+    :param affinity_mat: obligatory if kind='leiden' or 'louvain'
+    :param kind:
+    :return: cluster vector and number of clusters found
+    """
     cluster_vector = []
 
     if kind not in ['louvain', 'leiden', 'spectral']:
@@ -216,6 +280,13 @@ def get_cluster(graph=None, gamma=1.0, n_cluster=4, affinity_mat=np.array([]), k
 
 
 def kNN_selection(mat, k_percent, kind='affinity'):
+    """
+    Sets upper/lower k_percent of the input matrix to 0 dependent on kind.
+    :param mat:
+    :param k_percent:
+    :param kind:
+    :return:
+    """
     if kind not in ['affinity', 'distance']:
         raise ValueError('\'kind\' has to be either \'affinity\' or \'distance\'.')
     t0 = time.time()
@@ -260,6 +331,13 @@ def exclude_class(class_label: str, df, A):
 
 
 def get_train_F(cluster_vector, df, kind='absolute'):
+    """
+    Builds training feature vector from the input clustering.
+    :param cluster_vector:
+    :param df:
+    :param kind:
+    :return:
+    """
     if kind not in ['absolute', 'relative', 'freq']:
         raise ValueError('\'kind\' has to be either \'absolute\', \'relative\' or \'freq\'')
 
@@ -298,6 +376,14 @@ def get_train_F(cluster_vector, df, kind='absolute'):
 
 
 def get_test_C(train_D, train_C, test_D, n_neighbors=111):
+    """
+    Performs kNN classification of the test data to obtain a test cluster vector.
+    :param train_D:
+    :param train_C:
+    :param test_D:
+    :param n_neighbors:
+    :return:
+    """
     knn_clf = KNeighborsClassifier(n_neighbors=n_neighbors)
     knn_clf.fit(train_D, train_C)
 
@@ -307,6 +393,14 @@ def get_test_C(train_D, train_C, test_D, n_neighbors=111):
 
 
 def get_test_F(test_C, test_df, n_cluster, kind='relative'):
+    """
+    Build test feature vector from the test clustering obtained through kNN classification.
+    :param test_C:
+    :param test_df:
+    :param n_cluster:
+    :param kind:
+    :return:
+    """
     patient_ids = np.unique([x[0] for x in test_df.index])
     n = len(patient_ids)
     test_F = np.zeros((n, n_cluster))
@@ -336,42 +430,44 @@ def get_test_F(test_C, test_df, n_cluster, kind='relative'):
 
 
 def get_kNN(train_dm, test_dm, k=11):
+    """
+    kNN classification of the test data.
+    :param train_dm:
+    :param test_dm:
+    :param k:
+    :return:
+    """
     nn = NearestNeighbors(n_neighbors=k, metric='precomputed', algorithm='auto')
     nn.fit(train_dm)
     dd, ii = nn.kneighbors(test_dm, n_neighbors=11)
     return dd, ii
 
 
-def get_test_cluster_profile(indices, train_cluster_vector, test_df, kind='relative'):
-    # TODO adjust output so it can be visualized
-    n_cluster = len(np.unique(train_cluster_vector))
+def make_classification(train_feature, test_feature, train_response, test_response):
+    """
+    Make classification on a single fold.
+    :param train_feature:
+    :param test_feature:
+    :param train_response:
+    :param test_response:
+    :return:
+    """
+    model = LogisticRegression(class_weight='balanced', max_iter=50000)
+    model.fit(train_feature, train_response)
+    y_pred = model.predict(test_feature)
+    print(classification_report(test_response, y_pred))
 
-    patient_ids = np.unique([x[0] for x in test_df.index])
-    n = len(patient_ids)
+    f1 = f1_score(y_true=test_response, y_pred=y_pred)
+    bal_acc = balanced_accuracy_score(y_true=test_response, y_pred=y_pred)
+    prec = precision_score(y_true=test_response, y_pred=y_pred)
+    sens = recall_score(y_true=test_response, y_pred=y_pred, pos_label=1)
+    spec = recall_score(y_true=test_response, y_pred=y_pred, pos_label=0)
 
-    test_cluster_profile = np.zeros((n, n_cluster))
-    sequences_per_cluster = [[] for _ in range(n_cluster)]
+    return [f1, bal_acc, prec, sens, spec]
 
-    for patient_ix, tag in enumerate(patient_ids):
-        ixs = get_patient_indices(tag, test_df)
 
-        patient_sequences = np.array(test_df.iloc[ixs]['sequence'].to_list())
-        patient_frequencies = np.array(test_df.iloc[ixs]['freq'].to_list()).astype(float)
-        patient_Vs = np.array(test_df.iloc[ixs]['v'].to_list())
-
-        for knn_ixs, sequence, frequency, v in zip(indices[ixs], patient_sequences, patient_frequencies, patient_Vs):
-            cluster = mode(train_cluster_vector[knn_ixs])
-            if kind == 'relative' or kind == 'absolute':
-                test_cluster_profile[patient_ix, cluster] += 1
-            if kind == 'freq':
-                test_cluster_profile[patient_ix, cluster] += frequency
-
-            sequences_per_cluster[cluster].append([tag[:2], tag[:-1], sequence, v])
-    if kind == 'relative':
-        test_cluster_profile = test_cluster_profile / test_cluster_profile.sum(axis=0)
-
-    return test_cluster_profile, sequences_per_cluster
-
+# The following methods serve the purpose of plotting different parts of the data respectively the data at different
+# steps in the workflow.
 
 def plot_umap(embedding, cluster_vector, umap_title, loc):
     cmap = cm.get_cmap('Set1', max(cluster_vector) + 1)
@@ -389,21 +485,6 @@ def plot_umap(embedding, cluster_vector, umap_title, loc):
 def plot_similarity_histogram(dm):
     flat_dm = [entry for row in dm for entry in row]
     plt.hist(flat_dm, bins='auto')
-
-
-def make_classification(train_feature, test_feature, train_response, test_response):
-    model = LogisticRegression()
-    model.fit(train_feature, train_response)
-    y_pred = model.predict(test_feature)
-    print(classification_report(test_response, y_pred))
-
-    f1 = f1_score(y_true=test_response, y_pred=y_pred)
-    bal_acc = balanced_accuracy_score(y_true=test_response, y_pred=y_pred)
-    prec = precision_score(y_true=test_response, y_pred=y_pred)
-    sens = recall_score(y_true=test_response, y_pred=y_pred, pos_label=1)
-    spec = recall_score(y_true=test_response, y_pred=y_pred, pos_label=0)
-
-    return [f1, bal_acc, prec, sens, spec]
 
 
 def visualize_cluster_distributions(cluster_info, sm, ck):
@@ -430,6 +511,15 @@ def visualize_cluster_distributions(cluster_info, sm, ck):
 
 
 def get_consensus_sequences(cluster_info, percent_occurence, sm, ck):
+    """
+    Get consensus sequnce per cluster dependent on a threshold.
+    :param cluster_info:
+    :param percent_occurence: threshold on number of sequnces the amino acids have to appear in to be considered part
+                              of the consenus sequence.
+    :param sm:
+    :param ck:
+    :return:
+    """
     for cix, cluster in enumerate(cluster_info):
         temp_df = pd.DataFrame(columns=['Class', 'ID', 'seq', 'v'])
 
@@ -448,172 +538,13 @@ def get_consensus_sequences(cluster_info, percent_occurence, sm, ck):
         temp_file.close()
 
 
-def classification_main(sm_name,
-                        dm_path,
-                        n_splits, test_size,
-                        class_label_to_exclude=None,
-                        k_=None, g_=None,
-                        knn_clf_k=11,
-                        plot_eigengap=False, plot_full_UMAP=False, plot_excluded_class_UMAP=False,
-                        plot_UMAP_w_clusters=False):
-    print('Starting run on {}'.format(sm_name))
-
-    overall_results = []
-
-    if k_ is None:
-        k_ = [0]
-
-    train_graph = None
-    n_sc_cluster = 0
-
-    df = get_fasta_info()
-    full_A = get_am(dm_path, full=True)
-    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
-    full_D = similarities_to_distances(full_A)
-
-    print('Data acquired, shifted, and transformed.')
-
-    full_embedding = get_embedding(full_D)
-
-    if plot_full_UMAP:
-        n, _ = full_D.shape
-        plot_umap(full_embedding, [1] * n, '{} - all sequences included'.format(sm_name),
-                  loc='{}_full_umap.png'.format(sm_name))
-
-    if class_label_to_exclude:
-        A, reduced_df = exclude_class(class_label_to_exclude, df, full_A)
-        D, _ = exclude_class(class_label_to_exclude, df, full_D)
-
-        print('Exclusion accomplished.')
-
-        if plot_excluded_class_UMAP:
-            embedding = get_embedding(D)
-            n, _ = D.shape
-            plot_umap(embedding, [1] * n, '{} - {} excluded'.format(sm_name, class_label_to_exclude),
-                      loc='/home/ubuntu/Enno/gammaDelta/{}/{}_{}_excluded_umap.png'.format(sm_name, sm_name,
-                                                                                           class_label_to_exclude))
-    else:
-        A = full_A
-        reduced_df = df
-
-    print('Now starting k% iteration.')
-
-    for k_percent in k_:
-        if k_percent == 0:
-            A_in_use = A
-        else:
-            A_in_use = kNN_selection(A, k_percent)
-
-        cv_splits = get_matrix_train_test(df=reduced_df, mat=A_in_use, n_splits=n_splits, test_size=test_size)
-        cv_performance, cv_self_performance = [], []
-
-        for cluster_kind in ['spectral', 'leiden']:
-            # for feature_kind in ['absolute', 'relative', 'freq', 'relative_freq']:
-            # print('Now starting {} clustering.'.format(cluster_kind))
-
-            first_loop = True
-            for train_df, train_A, y_train, test_df, test_A, y_test in cv_splits:
-                print(len(train_df), len(test_df))
-                print(train_A.shape, test_A.shape)
-                print(y_train, y_test)
-
-                if cluster_kind in ['louvain', 'leiden']:
-                    train_graph = get_graph(train_A)
-
-                elif cluster_kind == 'spectral':
-                    eigenvalues, eigenvectors, n_sc_cluster = eigengap_heuristic(train_A, plot=plot_eigengap,
-                                                                                 loc='/home/ubuntu/Enno/gammaDelta/{}/{}_spectral_eigengap.png'.format(
-                                                                                     sm_name, sm_name))
-                    if n_sc_cluster > 100:
-                        n_sc_cluster = 50
-
-                train_cluster_vector, n_cluster = get_cluster(graph=train_graph, gamma=g_,
-                                                              affinity_mat=train_A,
-                                                              n_cluster=n_sc_cluster,
-                                                              kind=cluster_kind)
-
-                if plot_UMAP_w_clusters:
-                    train_D = similarities_to_distances(train_A)
-                    train_mbed = get_embedding(train_D)
-                    plot_umap(train_mbed, train_cluster_vector,
-                              '{} - {} excluded'.format(sm_name, class_label_to_exclude),
-                              loc='/home/ubuntu/Enno/gammaDelta/{}/{}_train_UMAP_w_{}.png'.format(sm_name, sm_name,
-                                                                                                  cluster_kind))
-
-                # TODO kind iterator
-                train_feature_vector, train_sequences_per_cluster = get_train_F(train_cluster_vector, train_df,
-                                                                                kind='relative')
-                distances, indices = get_kNN(train_A, test_A, k=knn_clf_k)
-                test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices,
-                                                                                           train_cluster_vector,
-                                                                                           test_df)
-
-                if first_loop:
-                    visualize_cluster_distributions(train_sequences_per_cluster, sm=sm_name, ck=cluster_kind)
-                    first_loop = False
-
-                performance = make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
-                print(performance)
-
-                self_performance = make_classification(train_feature_vector, train_feature_vector, y_train, y_train)
-                print(self_performance)
-
-                cv_performance.append(performance)
-                cv_self_performance.append(self_performance)
-
-            average_cv_performance = np.average(cv_performance, axis=0)
-            average_cv_self_performance = np.average(cv_self_performance, axis=0)
-
-            cv_performance, cv_self_performance = [], []
-
-            overall_results.append([sm_name, cluster_kind, n_cluster, k_percent,
-                                    average_cv_performance[0],
-                                    average_cv_performance[1],
-                                    average_cv_performance[2],
-                                    average_cv_performance[3],
-                                    average_cv_performance[4]])
-
-            overall_results.append([sm_name + ' self', cluster_kind, n_cluster, k_percent,
-                                    average_cv_self_performance[0],
-                                    average_cv_self_performance[1],
-                                    average_cv_self_performance[2],
-                                    average_cv_self_performance[3],
-                                    average_cv_self_performance[4]])
-
-    result_df = pd.DataFrame(
-        columns=['sm', 'cluster_kind', 'n_cluster', 'k_percent', 'f1', 'bal_acc', 'prec', 'sens', 'spec'])
-
-    for ix, result in enumerate(overall_results):
-        result_df.loc[ix] = result
-
-    result_df.to_csv('/home/ubuntu/Enno/gammaDelta/{}/{}_result.csv'.format(sm_name, sm_name))
-    print('{} run done.'.format(sm_name))
-
-
-def main():
-    df = get_fasta_info()
-    dm = get_am(path_to_am=b62, full=True)
-    split, train_I, test_I = get_matrix_train_test(df, dm)
-    train_df, train_dm, y_train, test_df, test_dm, y_test = split[0]
-    embedding = get_embedding(train_dm)
-
-    train_G = get_graph(train_dm)
-
-    train_C, n_cluster = get_cluster(graph=train_G, gamma=1.1, kind='louvain')
-
-    plot_umap(embedding, train_C, 'UMAP', '')
-
-    train_feature_vector, train_sequences_per_cluster = get_train_F(train_C, train_df)
-
-    distances, indices = get_kNN(train_dm, test_dm, k=10)
-
-    test_feature_vector, test_sequences_per_cluster = get_test_cluster_profile(indices, train_C, test_df)
-
-    make_classification(train_feature_vector, test_feature_vector, y_train, y_test)
-
-
 def kNN_main(sm_path, sm_name):
-    # for-loop iterables
+    """
+    Script to run on the virtual machine.
+    :param sm_path:
+    :param sm_name:
+    :return:
+    """
     K = [x/10 for x in list(range(3, 10))]
     N_SCLUSTER = np.geomspace(5, 500, 20).astype(int)
     # [3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000, 1250, 1500]
@@ -621,12 +552,6 @@ def kNN_main(sm_path, sm_name):
     #           1.18, 1.19, 1.2]
     # cluster_parameter_list = list(zip(N_SCLUSTER, GAMMAS))
 
-    # output variables
-    # What do we want?
-    # 1 Test Performance for every k
-    # 2 Train Performance for every k
-    # 3 ARI scores
-    # CK cluster kind, FK feature kind, NC number clusters, BA balanced accuracy, F1 F1 score, PR precision, SP specificity, SN sensitivity
     performance = []
     self_performance = []
     ari = []
@@ -657,6 +582,7 @@ def kNN_main(sm_path, sm_name):
             # kNN_full_leiden_C, n_kNN_full_leiden = get_cluster(graph=kNN_G, gamma=gamma, n_cluster=0,
             #                                                    affinity_mat=np.array([]), kind='leiden')
 
+            # FOR SPLIT IN SPLITS
             cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=kNN_A, n_splits=1, test_size=0.2)
             train_df, kNN_train_A, train_Y, test_df, kNN_test_A, test_Y = cv_splits[0]
 
@@ -773,143 +699,6 @@ def kNN_main(sm_path, sm_name):
     performance_df.to_csv('{}/{}_k_run_test_performance.csv'.format(sm_name, sm_name))
     self_performance_df.to_csv('{}/{}_k_run_train_performance.csv'.format(sm_name, sm_name))
     ari_df.to_csv('{}/{}_k_run_ari.csv'.format(sm_name, sm_name))
-
-
-def spectral_n_main(sm_path, sm_name, kind):
-    performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
-    self_performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
-
-    full_df = get_fasta_info()
-    full_A = get_am(sm_path, full=True)
-    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
-    full_D = similarities_to_distances(full_A)
-
-    red_A, reduced_df = exclude_class('FU', full_df, full_A)
-    red_D, _ = exclude_class('FU', full_df, full_D)
-
-    cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
-    train_df, train_A, train_Y, test_df, test_A, test_Y = cv_splits[0]
-
-    test_D = similarities_to_distances(test_A)
-    train_D = similarities_to_distances(train_A)
-
-    # red_mbed = get_embedding(red_D)
-    # train_mbed = get_embedding(train_D)
-
-    for ix, n_scluster in enumerate(
-            [3, 6, 9, 12, 16, 24, 32, 48, 54, 66, 90, 120, 240, 320, 480, 600, 700, 800, 1000, 1250, 1500]):
-        print(ix, n_scluster)
-        train_C, n_cluster = get_cluster(graph=None, gamma=1,
-                                         affinity_mat=train_A,
-                                         n_cluster=n_scluster,
-                                         kind='spectral')
-
-        train_F, train_SPC = get_train_F(train_C, train_df, kind=kind)
-
-        test_C = get_test_C(train_D, train_C, test_D)
-        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind=kind)
-
-        model = LogisticRegression(class_weight='balanced')
-        model.fit(train_F, train_Y)
-
-        pred_Y = model.predict(test_F)
-        performance_df.loc[ix] = [n_cluster,
-                                  balanced_accuracy_score(test_Y, pred_Y),
-                                  f1_score(test_Y, pred_Y),
-                                  precision_score(test_Y, pred_Y),
-                                  recall_score(test_Y, pred_Y),
-                                  recall_score(test_Y, pred_Y, pos_label=0)]
-
-        pred_Y = model.predict(train_F)
-        self_performance_df.loc[ix] = [n_cluster,
-                                       balanced_accuracy_score(train_Y, pred_Y),
-                                       f1_score(train_Y, pred_Y),
-                                       precision_score(train_Y, pred_Y),
-                                       recall_score(train_Y, pred_Y),
-                                       recall_score(train_Y, pred_Y, pos_label=0)]
-
-    performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
-    plt.ylabel('classification performance')
-    plt.xlabel('number of clusters')
-    plt.title('{} classifier performance on test data using different spectral n'.format(sm_name))
-    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
-    plt.savefig('{}/{}_test_performance_spectral_n.png'.format(sm_name, sm_name))
-
-    self_performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
-    plt.ylabel('classification performance')
-    plt.xlabel('number of clusters')
-    plt.title('{} classifier performance on train data using spectral n'.format(sm_name))
-    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
-    plt.savefig('{}/{}_self_performance_spectral_n.png'.format(sm_name, sm_name))
-
-
-def gamma_main(sm_path, sm_name, kind):
-    performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
-    self_performance_df = pd.DataFrame(columns=['NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
-
-    full_df = get_fasta_info()
-    full_A = get_am(sm_path, full=True)
-    full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
-    full_D = similarities_to_distances(full_A)
-
-    red_A, reduced_df = exclude_class('FU', full_df, full_A)
-    red_D, _ = exclude_class('FU', full_df, full_D)
-
-    cv_splits, train_I, test_I = get_matrix_train_test(df=reduced_df, mat=red_A, n_splits=1, test_size=0.2)
-    train_df, train_A, train_Y, test_df, test_A, test_Y = cv_splits[0]
-
-    train_G = get_graph(train_A)
-    train_D = similarities_to_distances(train_A)
-    test_D = similarities_to_distances(test_A)
-
-    # red_mbed = get_embedding(red_D)
-    # train_mbed = get_embedding(train_D)
-
-    for ix, g in enumerate(
-            [1.0, 1.01, 1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.09, 1.1, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16, 1.17,
-             1.18, 1.19, 1.2]):
-        train_C, n_cluster = get_cluster(graph=train_G, gamma=g,
-                                         affinity_mat=np.array([]),
-                                         n_cluster=0,
-                                         kind='leiden')
-
-        train_F, train_SPC = get_train_F(train_C, train_df, kind=kind)
-
-        test_C = get_test_C(train_D, train_C, test_D)
-        test_F, test_SPC = get_test_F(test_C, test_df, n_cluster, kind=kind)
-
-        model = LogisticRegression(class_weight='balanced')
-        model.fit(train_F, train_Y)
-
-        pred_Y = model.predict(test_F)
-        performance_df.loc[ix] = [n_cluster,
-                                  balanced_accuracy_score(test_Y, pred_Y),
-                                  f1_score(test_Y, pred_Y),
-                                  precision_score(test_Y, pred_Y),
-                                  recall_score(test_Y, pred_Y),
-                                  recall_score(test_Y, pred_Y, pos_label=0)]
-
-        pred_Y = model.predict(train_F)
-        self_performance_df.loc[ix] = [n_cluster,
-                                       balanced_accuracy_score(train_Y, pred_Y),
-                                       f1_score(train_Y, pred_Y),
-                                       precision_score(train_Y, pred_Y),
-                                       recall_score(train_Y, pred_Y),
-                                       recall_score(train_Y, pred_Y, pos_label=0)]
-
-    performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
-    plt.ylabel('classification performance')
-    plt.xlabel('number of clusters')
-    plt.title('{} classifier performance on test data using different gammas'.format(sm_name))
-    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
-    plt.savefig('{}/{}_test_performance_gammas.png'.format(sm_name, sm_name))
-
-    self_performance_df[['BA', 'F1', 'PR', 'SP', 'SN']].plot(figsize=(16, 8))
-    plt.ylabel('classification performance')
-    plt.xlabel('number of clusters')
-    plt.title('{} classifier performance on train data using different gammas'.format(sm_name))
-    plt.xticks(ticks=performance_df.index, labels=performance_df['NC'].astype(int))
-    plt.savefig('{}/{}_self_performance_gammas.png'.format(sm_name, sm_name))
 
 
 if __name__ == '__main__':
