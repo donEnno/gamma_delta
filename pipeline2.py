@@ -5,7 +5,6 @@ import joblib
 import numexpr
 import numpy as np
 import pandas as pd
-from statistics import mode
 from Bio import SeqIO, AlignIO
 from Bio.Align import AlignInfo
 import networkit
@@ -173,7 +172,7 @@ def get_graph(dm):
     :param dm:
     :return: networkit graph
     """
-    t0 = time.time()
+    t_0 = time.time()
     m, _ = dm.shape
     g = networkit.Graph(m, weighted=True)
     mask_x, mask_y = np.mask_indices(m, np.tril, -1)
@@ -184,7 +183,7 @@ def get_graph(dm):
             continue
         g.addEdge(nodeA, nodeB, weight)
 
-    print('The graph construction took %.3f s' % (time.time() - t0))
+    print('The graph construction took %.3f s' % (time.time() - t_0))
 
     return g
 
@@ -289,7 +288,7 @@ def kNN_selection(mat, k_percent, kind='affinity'):
     """
     if kind not in ['affinity', 'distance']:
         raise ValueError('\'kind\' has to be either \'affinity\' or \'distance\'.')
-    t0 = time.time()
+    t_0 = time.time()
     knn_mat = copy.deepcopy(mat)
     n, _ = mat.shape
     k = int(n * k_percent)
@@ -303,7 +302,7 @@ def kNN_selection(mat, k_percent, kind='affinity'):
     rows = np.arange(n)[:, None]
     knn_mat[rows, top_ixs] = 0
     knn_mat[top_ixs, rows] = 0
-    print('kNN_selection (kind={}) for k_percent = {} took {:.2f}s'.format(kind, k_percent, time.time() - t0))
+    print('kNN_selection (kind={}) for k_percent = {} took {:.2f}s'.format(kind, k_percent, time.time() - t_0))
     return knn_mat
 
 
@@ -488,7 +487,6 @@ def plot_similarity_histogram(dm):
 
 
 def visualize_cluster_distributions(cluster_info, sm, ck):
-    classes = ['HD', 'BL', 'FU']
 
     for cix, cluster in enumerate(cluster_info):
         temp_df = pd.DataFrame(columns=['Class', 'ID', 'seq', 'v'])
@@ -510,14 +508,12 @@ def visualize_cluster_distributions(cluster_info, sm, ck):
         plt.savefig('/home/ubuntu/Enno/gammaDelta/{}/{}_{}_{}.png'.format(sm, sm, ck, cix), bbox_inches='tight')
 
 
-def get_consensus_sequences(cluster_info, percent_occurence, sm, ck):
+def get_consensus_sequences(cluster_info, percent_occurence):
     """
     Get consensus sequnce per cluster dependent on a threshold.
     :param cluster_info:
     :param percent_occurence: threshold on number of sequnces the amino acids have to appear in to be considered part
                               of the consenus sequence.
-    :param sm:
-    :param ck:
     :return:
     """
     for cix, cluster in enumerate(cluster_info):
@@ -538,11 +534,11 @@ def get_consensus_sequences(cluster_info, percent_occurence, sm, ck):
         temp_file.close()
 
 
-def kNN_main(sm_path, sm_name):
+def kNN_main(path_to_sm, substitution_matrix_name):
     """
     Script to run on the virtual machine.
-    :param sm_path:
-    :param sm_name:
+    :param path_to_sm:
+    :param substitution_matrix_name:
     :return:
     """
     K = [x/10 for x in list(range(3, 10))]
@@ -557,7 +553,7 @@ def kNN_main(sm_path, sm_name):
     ari = []
 
     full_df = get_fasta_info()
-    full_A = get_am(sm_path, full=True)
+    full_A = get_am(path_to_sm, full=True)
     full_A = shift_similarities_to_zero(full_A)  # shifted affinity matrix A
     full_D = similarities_to_distances(full_A)
 
@@ -574,7 +570,7 @@ def kNN_main(sm_path, sm_name):
 
         for k_ in K:
             kNN_A = kNN_selection(full_A, k_, kind='affinity')
-            kNN_D = shift_similarities_to_zero(kNN_A)
+            # kNN_D = shift_similarities_to_zero(kNN_A)
             # kNN_G = get_graph(kNN_A)
 
             kNN_full_spectral_C, n_kNN_full_spectral = get_cluster(graph=None, gamma=1, n_cluster=n_s_cluster,
@@ -696,9 +692,9 @@ def kNN_main(sm_path, sm_name):
     self_performance_df = pd.DataFrame(self_performance, columns=['TYPE', 'K', 'CK', 'FK', 'NC', 'BA', 'F1', 'PR', 'SP', 'SN'])
     ari_df = pd.DataFrame(ari, columns=['CK', 'FK', 'K', 'FvJ', 'KvJ'])
 
-    performance_df.to_csv('{}/{}_k_run_test_performance.csv'.format(sm_name, sm_name))
-    self_performance_df.to_csv('{}/{}_k_run_train_performance.csv'.format(sm_name, sm_name))
-    ari_df.to_csv('{}/{}_k_run_ari.csv'.format(sm_name, sm_name))
+    performance_df.to_csv('{}/{}_k_run_test_performance.csv'.format(substitution_matrix_name, substitution_matrix_name))
+    self_performance_df.to_csv('{}/{}_k_run_train_performance.csv'.format(substitution_matrix_name, substitution_matrix_name))
+    ari_df.to_csv('{}/{}_k_run_ari.csv'.format(substitution_matrix_name, substitution_matrix_name))
 
 
 if __name__ == '__main__':
@@ -706,13 +702,11 @@ if __name__ == '__main__':
     os.environ['NUMEXPR_MAX_THREADS'] = '52'
     numexpr.set_num_threads(52)
 
-    names = [('PAM70', pam70)]
+    sm_name, sm_path = 'PAM70', pam70
 
-    for name, path in names:
-        print('Let\'s go', name)
-        kNN_main(path, name)
-        # gamma_main(path, name, 'absolute')
+    print('Let\'s go', sm_name)
+    kNN_main(sm_path, sm_name)
 
     time_passed = (time.time() - t0) / 3600
     print('Time passed {:.2f}h'.format(time_passed))
-    print(name, ' done.')
+    print(sm_name, ' done.')
