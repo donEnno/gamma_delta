@@ -21,9 +21,8 @@ from sklearn.metrics import classification_report, f1_score, balanced_accuracy_s
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 import matplotlib
 from scipy import stats
-
-# global parameters
 from stability_selection import StabilitySelection
+
 
 matplotlib.use('Agg')
 os.environ['NUMEXPR_MAX_THREADS'] = '52'
@@ -85,7 +84,6 @@ def shift_similarities_to_zero(am):
 
 
 def f(x):
-    # TODO: Recherche
     """
     Affinity to distance transformation.
     :param x:
@@ -97,7 +95,7 @@ def f(x):
 def similarities_to_distances(am):
     """
     Converts input AM to DM.
-    :param am: DM
+    param am: DM
     :return:
     """
     am = shift_similarities_to_zero(am)
@@ -110,12 +108,12 @@ def similarities_to_distances(am):
 
 def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2, alle=False):
     """
-
-    :param df: Dataframe that supports the data.
-    :param mat: Matrix to split on.
-    :param n_splits:
-    :param test_size:
-    :return: splits: Splits of the supporting dataframe, matrix, and repsonse.
+    param df: Dataframe that supports the data.
+    param mat: Matrix to split on.
+    param n_splits:
+    param test_size:
+    param alle:
+    :return: splits: Splits of the supporting dataframe, matrix, and response.
              train_indices: Indices of patients to train on.
              test_indices: Indices of patients to test on.
     """
@@ -123,11 +121,7 @@ def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2, alle=False):
     train_indices = []
     test_indices = []
 
-    indexes = np.unique(df.P, return_index=True)[1]
-    patient_ids = np.array([df.P.to_list()[index] for index in sorted(indexes)])
-
-    # TODO: Is this equivalent?
-    # patient_ids = df.P.unique().sort_values().to_list()
+    patient_ids = df.P.unique()
 
     if alle:
         response = np.array([1 if 'BL' in patient or 'FU' in patient else 0 for patient in patient_ids])
@@ -145,7 +139,6 @@ def get_matrix_train_test(df, mat, n_splits=5, test_size=0.2, alle=False):
         X_train, X_test = patient_ids[train_index], patient_ids[test_index]
         y_train, y_test = response[train_index], response[test_index]
 
-        # TODO: Test it!
         train_ixs = [ix for patient_ixs in [get_patient_indices(tag, df) for tag in X_train] for ix in patient_ixs]
         test_ixs = [ix for patient_ixs in [get_patient_indices(tag, df) for tag in X_test] for ix in patient_ixs]
 
@@ -171,7 +164,7 @@ def get_fasta_info_old(file=path_to_fasta):
     fasta = list(SeqIO.parse(file, 'fasta'))
     index = [(patient, seq_no) for [patient, seq_no, _, _, _], seq in
              [(record.id.split('_'), str(record.seq)) for record in fasta]]
-    data = [[cohorte+'-'+patient_no+'-', s+'-'+sequence_no, seq] for [cohorte, p, patient_no, s, sequence_no], seq in
+    data = [[cohorte+'-'+patient_no+'-', s+'-'+sequence_no, seq] for [cohorte, _, patient_no, s, sequence_no], seq in
             [(record.id.split('_'), str(record.seq)) for record in fasta]]
     multi_index = pd.MultiIndex.from_tuples(index, names=['patient', 'seq_no'])
 
@@ -183,7 +176,7 @@ def get_fasta_info_old(file=path_to_fasta):
 def get_fasta_info(file='/home/ubuntu/Enno/gammaDelta/sequence_data/BLFUHD_fasta/BLFUHD_ALL_SEQUENCES.fasta'):
     fasta = list(SeqIO.parse(file, 'fasta'))
     data = [[cohorte + '-' + patient_no + '-', s + '-' + sequence_no, seq] for
-            [cohorte, p, patient_no, s, sequence_no], seq in
+            [cohorte, _, patient_no, s, sequence_no], seq in
             [(record.id.split('_'), str(record.seq)) for record in fasta]]
 
     df = pd.DataFrame(data, columns=['P', 'S', 'CDR'])
@@ -215,7 +208,7 @@ def get_graph(dm):
 
 def get_embedding(data):
     """
-    Data is an AM that is porcessed by UMAP.
+    Data is an AM that is processed by UMAP.
     :param data:
     :return: UMAP embedding of the data.
     """
@@ -226,11 +219,11 @@ def get_embedding(data):
 
 def eigengap_heuristic(am, plot, plot_path):
     """
-    Computes the eigenap of the AM as stated in
+    Computes the eigengap of the AM as stated in
     https://www.tml.cs.uni-tuebingen.de/team/luxburg/publications/Luxburg07_tutorial.pdf.
-    :param am:
-    :param plot: True if eigengap should be plotted.
-    :param plot_path:
+    param am:
+    param plot: True if eigengap should be plotted.
+    param plot_path:
     :return: Number of clusters to use for spectral clustering as suggested by the eigengap theory.
     """
     n, _ = am.shape
@@ -258,12 +251,12 @@ def eigengap_heuristic(am, plot, plot_path):
 
 def get_cluster(graph=None, gamma=1.0, n_cluster=4, affinity_mat=np.array([]), kind='louvain'):
     """
-    Perform clustering dependend on input params.
-    :param graph: obligatory if kind='leiden' or 'louvain'
-    :param gamma: obligatory if kind='leiden' or 'louvain'
-    :param n_cluster: obligatory if kind='spectral'
-    :param affinity_mat: obligatory if kind='leiden' or 'louvain'
-    :param kind:
+    Perform clustering dependent on input params.
+    param graph: obligatory if kind='leiden' or 'louvain'
+    param gamma: obligatory if kind='leiden' or 'louvain'
+    param n_cluster: obligatory if kind='spectral'
+    param affinity_mat: obligatory if kind='leiden' or 'louvain'
+    param kind:
     :return: cluster vector and number of clusters found
     """
     cluster_vector = []
@@ -332,12 +325,7 @@ def kNN_selection(mat, k_percent, kind='affinity'):
 
 
 def get_patient_indices(patient_id, df):
-    return [ix for ix, header in enumerate(df.P) if patient_id == header]
-
-"""
-def get_patient_indices(patient_id, df):
     return df[df.P == patient_id].index.to_list()
-"""
 
 
 def get_cohorte_indices(cohorte: str, df):
@@ -365,9 +353,9 @@ def exclude_class(class_label: str, df, A):
 def get_train_F_old(cluster_vector, df, kind='absolute'):
     """
     Builds training feature vector from the input clustering.
-    :param cluster_vector:
-    :param df:
-    :param kind:
+    param cluster_vector:
+    param df:
+    param kind:
     :return:
 
     """
@@ -413,9 +401,9 @@ def get_train_F_old(cluster_vector, df, kind='absolute'):
 def get_train_F(cluster_vector, df, kind='absolute'):
     """
     Builds training feature vector from the input clustering.
-    :param cluster_vector:
-    :param df:
-    :param kind:
+    param cluster_vector:
+    param df:
+    param kind:
     :return:
     """
     if kind not in ['absolute', 'relative', 'freq', 'ratio']:
@@ -423,8 +411,7 @@ def get_train_F(cluster_vector, df, kind='absolute'):
 
     n_cluster = len(np.unique(cluster_vector))
 
-    indexes = np.unique(df.P, return_index=True)[1]
-    patient_ids = [df.P.to_list()[index] for index in sorted(indexes)]
+    patient_ids = df.P.unique()
 
     n = len(patient_ids)
 
@@ -442,7 +429,7 @@ def get_train_F(cluster_vector, df, kind='absolute'):
 
         patient_cluster = cluster_vector[ixs]
 
-        for sequence, cluster in zip(patient_sequences, patient_cluster):  # , frequency, v , patient_frequencies, patient_Vs
+        for sequence, cluster in zip(patient_sequences, patient_cluster):  # ,frequency,v,patient_frequencies,patient_Vs
 
             if kind == 'relative' or kind == 'absolute':
                 feature_vector[patient_ix, cluster] += 1
@@ -516,12 +503,12 @@ def get_test_F(test_C, test_df, n_cluster, kind='relative'):
         # patient_frequencies = np.array(test_df.iloc[ixs]['freq'].to_list()).astype(float)
         patient_cluster = test_C[ixs]
 
-        for sequence, cluster in zip(patient_sequences, patient_cluster): # , frequency, v  , patient_frequencies, patient_Vs
+        for sequence, cluster in zip(patient_sequences, patient_cluster):  # frequency,v,patient_frequencies, patient_Vs
 
             if kind == 'relative' or kind == 'absolute':
                 test_F[patient_ix, cluster] += 1
 
-            test_SPC[cluster].append([tag[:2], tag[:-1], sequence]) # , v
+            test_SPC[cluster].append([tag[:2], tag[:-1], sequence])  # ,v
 
     if kind == 'relative':
         test_F = test_F / test_F.sum(axis=0)
@@ -574,11 +561,11 @@ def visualize_cluster_distributions(cluster_info, sm, ck):
         plt.savefig('/home/ubuntu/Enno/gammaDelta/{}/{}_{}_{}.png'.format(sm, sm, ck, cix), bbox_inches='tight')
 
 
-def get_consensus_sequences(cluster_info, percent_occurence):
+def get_consensus_sequences(cluster_info, percent_occurrence):
     """
-    Get consensus sequnce per cluster dependent on a threshold.
-    :param cluster_info:
-    :param percent_occurence: threshold on number of sequnces the amino acids have to appear in to be considered part
+    Get consensus sequence per cluster dependent on a threshold.
+    param cluster_info:
+    param percent_occurrence: threshold on number of sequences the amino acids have to appear in to be considered part
                               of the consenus sequence.
     :return:
     """
@@ -596,7 +583,7 @@ def get_consensus_sequences(cluster_info, percent_occurence):
 
         alignment = AlignIO.read(temp_file, 'fasta')
         summary_align = AlignInfo.SummaryInfo(alignment)
-        summary_align.dumb_consensus(percent_occurence)
+        summary_align.dumb_consensus(percent_occurrence)
         temp_file.close()
 
 
@@ -619,6 +606,5 @@ if __name__ == '__main__':
 
 """
 TODO
-- mini Datensatz bauen und markierte Funktionen manuell testen
-- 
+- test marked methods with small dataset
 """
