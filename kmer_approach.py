@@ -78,10 +78,15 @@ def get_ecrf(filename: str):
     ecrf = ''
 
     if filename.startswith('BL') or filename.startswith('FU'):
-        if 'Copy' in filename:
-            ecrf = filename[19:23]
+        if filename.startswith('BL'):
+            suffix = '_B'
         else:
-            ecrf = filename[13:17]
+            suffix = '_F'
+
+        if 'Copy' in filename:
+            ecrf = filename[19:23] + suffix
+        else:
+            ecrf = filename[13:17] + suffix
 
     elif filename.startswith('HD'):
         ecrf = filename.split('_')[-3]
@@ -188,6 +193,7 @@ def build_p_k_mat(total_k_mer_counts):
         pkm[:, ix] = list(zip(*filled_total_counts[ix]))[1]
 
     return pkm
+
 
 def get_top_values(list_of_counts, d=10):
     out = []
