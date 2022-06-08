@@ -13,7 +13,7 @@ from kmer_approach import read_tcr_files
 remote = True
 
 if remote:
-    path_to_tcr_dir = '/sample_sequences'
+    path_to_tcr_dir = '/home/enno/PycharmProjects/gamma_delta/sample_sequences'
 else:
     path_to_tcr_dir = '/home/ubuntu/Enno/gammaDelta/patient_data'
 
@@ -86,7 +86,9 @@ def simpson_index(df, sample_class: str, v='all', kind='p'):
     return result
 
 
-def morisita_index(df: pd.DataFrame, v: str):
+def morisita_index(df: pd.DataFrame, v: str, sample_pairs=None):
+    if sample_pairs is None:
+        sample_pairs = []
     result = []
 
     if v == 'all':
@@ -98,20 +100,30 @@ def morisita_index(df: pd.DataFrame, v: str):
     else:
         raise ValueError('v parameter has to be \'all\', \'v1\', \'v2\', or \'else\'.')
 
-    combinations = itertools.combinations(samples, 2)
-    cs = itertools.combinations(samples, 2)
-    N = len(list(cs))
+    if sample_pairs:
+        combinations = []
+        for b, f in sample_pairs:
+            baseline = [s for s in samples if b in s.ecrf.unique()][0]
+            followup = [s for s in samples if f in s.ecrf.unique()][0]
+            combinations.append((baseline, followup))
+        N = len(combinations)
+
+    else:
+        combinations = itertools.combinations(samples, 2)
+        cs = itertools.combinations(samples, 2)
+        N = len(list(cs))
 
     for ix, (x, y) in enumerate(combinations):  # x, y DataFrames
 
         if ix % len(samples) == 0: print(f'{(ix / N) * 100:.2f} %')
+
         X = x.read_count.to_list()
         X_seq = x.sequence.to_list()
+
         Y = y.read_count.to_list()
         Y_seq = y.sequence.to_list()
 
         if set(X_seq).intersection(set(Y_seq)) == {}:
-            print('!')
             result.append(0)
             continue
 
@@ -157,11 +169,33 @@ def plot_tree_maps(df, sample_class: str, v: str = 'all', save=False):
         plt.clf()
 
 
+def get_sample_pairs_ecrf(b_df, f_df):
+    bl_identifier = b_df.ecrf.unique()
+    fu_identifier = f_df.ecrf.unique()
+
+    bf_combined = np.concatenate((fu_identifier, bl_identifier))
+
+    bl_ecrf = [b[:-2] for b in bl_identifier]
+    fu_ecrf = [f[:-2] for f in fu_identifier]
+
+    bf_pairs = list(set(bl_ecrf).intersection(set(fu_ecrf)))
+    bf_pairs = sorted([pa for pa in bf_combined if pa[:-2] in bf_pairs])
+
+    return list(zip(bf_pairs[::2], bf_pairs[1::2]))
+
+
 if __name__ == '__main__':
     t_0 = time.time()
 
     hd_df = read_tcr_files('HD', path_to_tcr_dir)
     bl_df = read_tcr_files('BL', path_to_tcr_dir)
     fu_df = read_tcr_files('FU', path_to_tcr_dir)
+    bf_df = pd.concat((bl_df, fu_df), ignore_index=True)
+
+    Vs = ['all', 'v1', 'v2', 'else']
+    DFs = [(hd_df, 'HD'), (bl_df, 'BL'), (fu_df, 'FU')]
+    for c_df, sc in DFs:
+        for v in Vs:
+            plot_tree_maps(df=df, sample_class=sc, v=v, save=True)
 
     print(f'\n{time.time() - t_0:.2f}s passed.')
