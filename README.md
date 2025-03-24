@@ -1,5 +1,8 @@
 # _gdTCR-MOCCA_
 
+For anyone wondering: This is the repository to my bachelor thesis!
+
+
 <img src="https://user-images.githubusercontent.com/73899443/151515795-2c45bcef-43d8-4958-9fa8-4adccffc2eb4.jpg" width="650">
 
 ### Distance approach
